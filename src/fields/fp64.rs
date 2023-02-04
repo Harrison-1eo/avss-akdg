@@ -1,10 +1,11 @@
 #[derive(Debug, Clone, Copy)]
-struct Fp64 {
+pub struct Fp64 {
     real: u64,
 }
 
 static MOD: u64 = 18446744069414584321u64; // 2**64 - 2**32 + 1
-static UNITY_ROOT: Fp64 = Fp64{ real: 2741030659394132017u64 };
+static ROOT_OF_UNITY: Fp64 = Fp64{ real: 2741030659394132017u64 };
+static LOG_MAX_DEGREE: u64 = 32; // MOD = 2**32 * 4294967295 + 1
 static HIGH: u128 = (1u128 << 127) - (1u128 << 96) + (1u128 << 127);
 static MIDDLE: u128 = (1u128 << 96) - (1u128 << 64);
 static LOW: u128 = (1u128 << 64) - 1;
@@ -111,6 +112,15 @@ use rand::Rng;
 use super::Field;
 
 impl Field for Fp64 {
+    fn from_int(x: u64) -> Fp64 {
+        if x >= MOD {
+            panic!("");
+        }
+        Fp64 { 
+            real: x
+        }
+    }
+    
     fn random_element() -> Self {
         let r: u64 = rand::thread_rng().gen_range(0..MOD);
         Fp64 { 
@@ -146,21 +156,21 @@ impl Field for Fp64 {
         self.real == 0
     }
 
-    fn get_unity_root() -> Self {
-        UNITY_ROOT
+    fn get_generator(order: u64) -> Self {
+        if (order & (order - 1)) != 0 || order > (1 << LOG_MAX_DEGREE) {
+            panic!("invalid order");
+        }
+        let mut res = ROOT_OF_UNITY;
+        let mut i = 1 << LOG_MAX_DEGREE;
+        while i > order {
+            res *= res;
+            i >>= 1;
+        }
+        res
     }
 }
 
 impl Fp64 {
-    fn from_int(x: u64) -> Fp64 {
-        if x >= MOD {
-            panic!("");
-        }
-        Fp64 { 
-            real: x
-        }
-    }
-
     fn ex_gcd(a: u64, b: u64, x_gcd: &mut i128, y_gcd: &mut i128) {
         let mut gcd_m = 0i128;
         let mut gcd_n = 1i128;
@@ -226,5 +236,11 @@ mod tests {
             assert_eq!(a, aa);
             assert!((-a + a).is_zero());
         }
+    }
+
+    #[test]
+    fn generator() {
+        assert_eq!(Fp64::get_generator(1), Fp64::from_int(1));
+        assert_eq!(Fp64::get_generator(1 << 32), ROOT_OF_UNITY);
     }
 }
