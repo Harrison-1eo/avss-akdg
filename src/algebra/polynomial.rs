@@ -1,5 +1,5 @@
-use super::fields::Field;
-use super::domain::subgroup::Coset;
+use super::field::Field;
+use super::coset::Coset;
 
 struct Polynomial<T: Field> {
     coefficients: Vec<T>
@@ -62,7 +62,7 @@ impl<T: Field> VanishingPolynomial<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::fields::fp64::Fp64;
+    use super::super::field::fp64::Fp64;
 
     #[test]
     fn evaluation() {

@@ -1,6 +1,4 @@
-mod fields;
-mod domain;
-mod polynomial;
+mod algebra;
 mod hash {
     mod sha256;
     mod merkel_tree;

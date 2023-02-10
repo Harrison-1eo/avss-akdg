@@ -196,8 +196,6 @@ impl Fp64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::fields::Field;
-
     use super::*;
 
     #[test]
