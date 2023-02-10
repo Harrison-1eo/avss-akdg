@@ -1,2 +1,2 @@
 mod radix2_domain;
-mod subgroup;
+pub mod subgroup;

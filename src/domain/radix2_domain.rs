@@ -13,6 +13,14 @@ impl<T: Field> Radix2Domain<T> {
         }
     }
 
+    pub fn order(&self) -> u64 {
+        self.order
+    }
+
+    pub fn omega(&self) -> T {
+        self.omega
+    }
+
     pub fn fft(&self, a: &mut Vec<T>) {
         assert_eq!(a.len() as u64, self.order);
         _fft(a, self.omega);
