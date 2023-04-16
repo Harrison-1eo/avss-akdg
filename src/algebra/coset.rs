@@ -1,19 +1,20 @@
 use super::field::Field;
 
+#[derive(Debug, Clone, Copy)]
 struct Radix2Domain<T: Field> {
-    order: u64,
+    order: usize,
     omega: T
 }
 
 impl<T: Field> Radix2Domain<T> {
-    pub fn new(order: u64) -> Self {
+    pub fn new(order: usize) -> Self {
         Radix2Domain { 
             order, 
             omega: T::get_generator(order)
         }
     }
 
-    pub fn order(&self) -> u64 {
+    pub fn order(&self) -> usize {
         self.order
     }
 
@@ -22,14 +23,14 @@ impl<T: Field> Radix2Domain<T> {
     }
 
     pub fn fft(&self, a: &mut Vec<T>) {
-        assert_eq!(a.len() as u64, self.order);
+        assert_eq!(a.len(), self.order);
         _fft(a, self.omega);
     }
 
     pub fn ifft(&self, a: &mut Vec<T>) {
-        assert_eq!(a.len() as u64, self.order);
+        assert_eq!(a.len(), self.order);
         _fft(a, self.omega.inverse());
-        let t = T::from_int(self.order).inverse();
+        let t = T::from_int(self.order as u64).inverse();
         for i in a {
             *i *= t;
         }
@@ -91,6 +92,7 @@ fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
 
 use std::{rc::Rc, cell::RefCell};
 
+#[derive(Debug, Clone)]
 pub struct Coset<T: Field> {
     elements: Rc<RefCell<Vec<T>>>,
     fft_cache: Rc<RefCell<Vec<T>>>,
@@ -99,7 +101,7 @@ pub struct Coset<T: Field> {
 }
 
 impl<T: Field> Coset<T> {
-    pub fn new(order: u64, shift: T) -> Self {
+    pub fn new(order: usize, shift: T) -> Self {
         assert!(!shift.is_zero());
         Coset { 
             elements: Rc::new(RefCell::new(vec![])), 
@@ -107,6 +109,10 @@ impl<T: Field> Coset<T> {
             fft_eval_domain: Radix2Domain::new(order),
             shift
         }
+    }
+
+    pub fn generator(&self) -> T {
+        self.fft_eval_domain.omega
     }
 
     pub fn all_elements(&self) -> Vec<T> {
@@ -122,11 +128,16 @@ impl<T: Field> Coset<T> {
     }
 
     pub fn num_elements(&self) -> usize {
-        self.fft_eval_domain.order() as usize
+        self.fft_eval_domain.order()
     }
 
     pub fn fft(&self, evals: &Vec<T>) -> Vec<T> {
+        assert!(self.num_elements() >= evals.len());
         let mut a = evals.clone();
+        let n = self.num_elements() as i64 - a.len() as i64;
+        for _i in 0..n {
+            a.push(T::from_int(0));
+        }
         self.fft_eval_domain.coset_fft(&mut a, self.shift);
         a
     }

@@ -1,22 +1,30 @@
 use super::field::Field;
 use super::coset::Coset;
 
-struct Polynomial<T: Field> {
+pub struct Polynomial<T: Field> {
     coefficients: Vec<T>
 }
 
 impl<T: Field> Polynomial<T> {
-    fn new(coefficients: Vec<T>) -> Polynomial<T> {
+    pub fn new(mut coefficients: Vec<T>) -> Polynomial<T> {
+        let zero = T::from_int(0);
+        while *coefficients.last().unwrap() == zero {
+            coefficients.pop();
+        }
         Polynomial { coefficients }
     }
 
-    fn random_polynomial(degree: usize) -> Polynomial<T> {
+    pub fn coefficients(&self) -> &Vec<T> {
+        &self.coefficients
+    }
+
+    pub fn random_polynomial(degree: usize) -> Polynomial<T> {
         Polynomial { 
             coefficients: (0..degree).map(|_| Field::random_element()).collect()
         }
     }
 
-    fn degree(&self) -> usize {
+    pub fn degree(&self) -> usize {
         let n = self.coefficients.len();
         if n == 0 {
             0
@@ -25,7 +33,7 @@ impl<T: Field> Polynomial<T> {
         }
     }
 
-    fn evaluation_at(&self, x: T) -> T {
+    pub fn evaluation_at(&self, x: T) -> T {
         let mut res = Field::from_int(0);
         for i in self.coefficients.iter().rev() {
             res *= x;
@@ -34,8 +42,7 @@ impl<T: Field> Polynomial<T> {
         res
     }
 
-    fn evaluation_over_coset(&self, coset: &Coset<T>) -> Vec<T> {
-        assert_eq!(self.coefficients.len(), coset.num_elements());
+    pub fn evaluation_over_coset(&self, coset: &Coset<T>) -> Vec<T> {
         coset.fft(&self.coefficients)
     }
 }
@@ -54,6 +61,8 @@ impl<T: Field> VanishingPolynomial<T> {
         }
     }
 
+    // The n roots of the equation x^n - a^n = 0 are a*w_n^0, ..., a*w_n*{n-1}
+    // Thus, f(x) = (x - a*w_n^0)...(x - a*w_n^{n-1}) = x^n - a^n
     fn evaluation_at(&self, x: T) -> T {
         x.pow(self.degree as u64) - self.shift
     }

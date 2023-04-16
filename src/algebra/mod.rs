@@ -1,3 +1,3 @@
-mod field;
-mod coset;
-mod polynomial;
+pub mod field;
+pub mod coset;
+pub mod polynomial;

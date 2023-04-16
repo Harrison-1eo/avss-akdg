@@ -156,7 +156,7 @@ impl Field for Fp64 {
         self.real == 0
     }
 
-    fn get_generator(order: u64) -> Self {
+    fn get_generator(order: usize) -> Self {
         if (order & (order - 1)) != 0 || order > (1 << LOG_MAX_DEGREE) {
             panic!("invalid order");
         }
