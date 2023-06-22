@@ -3,14 +3,14 @@ use super::field::Field;
 #[derive(Debug, Clone, Copy)]
 struct Radix2Domain<T: Field> {
     order: usize,
-    omega: T
+    omega: T,
 }
 
 impl<T: Field> Radix2Domain<T> {
     pub fn new(order: usize) -> Self {
-        Radix2Domain { 
-            order, 
-            omega: T::get_generator(order)
+        Radix2Domain {
+            order,
+            omega: T::get_generator(order),
         }
     }
 
@@ -77,7 +77,7 @@ fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
     let mut m = 1usize;
     for _i in 0..log_n {
         let w_m = omega.pow((n / (m * 2)) as u64);
-        for j in (0..n).step_by(2*m) {
+        for j in (0..n).step_by(2 * m) {
             let mut w = T::from_int(1);
             for k in 0..m {
                 let t = w * a[j + k + m];
@@ -90,24 +90,22 @@ fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
     }
 }
 
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct Coset<T: Field> {
     elements: Rc<RefCell<Vec<T>>>,
-    fft_cache: Rc<RefCell<Vec<T>>>,
     fft_eval_domain: Radix2Domain<T>,
-    shift: T
+    shift: T,
 }
 
 impl<T: Field> Coset<T> {
     pub fn new(order: usize, shift: T) -> Self {
         assert!(!shift.is_zero());
-        Coset { 
-            elements: Rc::new(RefCell::new(vec![])), 
-            fft_cache: Rc::new(RefCell::new(vec![])), 
+        Coset {
+            elements: Rc::new(RefCell::new(vec![])),
             fft_eval_domain: Radix2Domain::new(order),
-            shift
+            shift,
         }
     }
 
@@ -158,8 +156,8 @@ impl<T: Field> Coset<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::field::fp64::Fp64;
+    use super::*;
 
     #[test]
     fn fft_and_ifft() {

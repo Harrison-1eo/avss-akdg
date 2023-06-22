@@ -1,5 +1,5 @@
 [package]
-name = "fri-range-proof"
+name = "fri"
 version = "0.1.0"
 edition = "2021"
 

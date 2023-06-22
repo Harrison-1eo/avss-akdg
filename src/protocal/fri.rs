@@ -1,12 +1,12 @@
-use std::{rc::Rc, cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::algebra::{field::Field, coset::Coset, polynomial::*};
+use crate::algebra::{coset::Coset, field::Field, polynomial::*};
 
 pub struct FriProver<T: Field> {
     parameter_array: Vec<usize>,
     coset: Coset<T>,
     interpolate_values: Vec<Vec<T>>,
-    verifier: Option<Rc<RefCell<FriVerifier<T>>>>
+    verifier: Option<Rc<RefCell<FriVerifier<T>>>>,
 }
 
 pub struct FriVerifier<T: Field> {
@@ -15,18 +15,22 @@ pub struct FriVerifier<T: Field> {
     poly_degree_bound: usize,
     challenges: Vec<T>,
     prover: Option<Rc<RefCell<FriProver<T>>>>,
-    final_poly: Option<Polynomial<T>>
+    final_poly: Option<Polynomial<T>>,
 }
 
-impl <T: Field> FriVerifier<T> {
-    pub fn new(parameter_array: &Vec<usize>, coset: &Coset<T>, poly_degree_bound: usize) -> FriVerifier<T> {
-        FriVerifier { 
-            parameter_array: parameter_array.clone(), 
-            coset: coset.clone(), 
-            poly_degree_bound, 
-            challenges: vec![], 
-            prover: None, 
-            final_poly: None 
+impl<T: Field> FriVerifier<T> {
+    pub fn new(
+        parameter_array: &Vec<usize>,
+        coset: &Coset<T>,
+        poly_degree_bound: usize,
+    ) -> FriVerifier<T> {
+        FriVerifier {
+            parameter_array: parameter_array.clone(),
+            coset: coset.clone(),
+            poly_degree_bound,
+            challenges: vec![],
+            prover: None,
+            final_poly: None,
         }
     }
 
@@ -99,22 +103,30 @@ impl <T: Field> FriVerifier<T> {
 }
 
 impl<T: Field> FriProver<T> {
-    pub fn new(interpolate_value: Vec<T>, parameter_array: &Vec<usize>, coset: &Coset<T>) -> FriProver<T> {
-        FriProver { 
-            parameter_array: parameter_array.clone(), 
-            coset: coset.clone(), 
-            interpolate_values: vec![interpolate_value], 
-            verifier: None
+    pub fn new(
+        interpolate_value: Vec<T>,
+        parameter_array: &Vec<usize>,
+        coset: &Coset<T>,
+    ) -> FriProver<T> {
+        FriProver {
+            parameter_array: parameter_array.clone(),
+            coset: coset.clone(),
+            interpolate_values: vec![interpolate_value],
+            verifier: None,
         }
     }
 
-    pub fn from_polynomial(polynomial: Polynomial<T>, parameter_array: &Vec<usize>, coset: &Coset<T>) -> FriProver<T> {
+    pub fn from_polynomial(
+        polynomial: Polynomial<T>,
+        parameter_array: &Vec<usize>,
+        coset: &Coset<T>,
+    ) -> FriProver<T> {
         let interpolate_values = vec![polynomial.evaluation_over_coset(coset)];
-        FriProver { 
-            parameter_array: parameter_array.clone(), 
-            coset: coset.clone(), 
+        FriProver {
+            parameter_array: parameter_array.clone(),
+            coset: coset.clone(),
             interpolate_values,
-            verifier: None 
+            verifier: None,
         }
     }
 
@@ -139,8 +151,12 @@ impl<T: Field> FriProver<T> {
         res
     }
 
-    fn evaluation_next_domain(interpolate_value: &Vec<T>, 
-        current_domain: &Coset<T>, eta: usize, challenge: T) -> Vec<T> {
+    fn evaluation_next_domain(
+        interpolate_value: &Vec<T>,
+        current_domain: &Coset<T>,
+        eta: usize,
+        challenge: T,
+    ) -> Vec<T> {
         let coset_size = 1 << eta;
         let num_coset = current_domain.num_elements() / coset_size;
         let h_inc = current_domain.generator();
@@ -171,12 +187,14 @@ impl<T: Field> FriProver<T> {
             cur_h *= h_inc;
             cur_coset_constant_plus_h *= h_inc_to_coset_inv_plus_one;
         }
-        let lagrange_coefficients = Self::batch_inverse_and_mul(elements_to_invert, constant_for_all_coset);
+        let lagrange_coefficients =
+            Self::batch_inverse_and_mul(elements_to_invert, constant_for_all_coset);
         let mut next_interpolate_value = Vec::with_capacity(num_coset);
         for j in 0..num_coset {
             let mut interpolation = T::from_int(0);
             for k in 0..coset_size {
-                interpolation += interpolate_value[k * num_coset + j] * lagrange_coefficients[j * coset_size + k];
+                interpolation += interpolate_value[k * num_coset + j]
+                    * lagrange_coefficients[j * coset_size + k];
             }
             interpolation *= constant_for_each_coset[j];
             next_interpolate_value.push(interpolation);
@@ -194,8 +212,11 @@ impl<T: Field> FriProver<T> {
             // todo: merkle tree commit
             let challenge = verifier.borrow_mut().get_challenge();
             let next_evalutation = Self::evaluation_next_domain(
-                &self.interpolate_values.last().unwrap(), 
-                &domain, eta, challenge);
+                &self.interpolate_values.last().unwrap(),
+                &domain,
+                eta,
+                challenge,
+            );
             self.interpolate_values.push(next_evalutation);
             for _j in 0..eta {
                 shift *= shift;
@@ -227,7 +248,7 @@ impl<T: Field> FriProver<T> {
             points = query_list;
             for j in &points {
                 for k in (*j..len).step_by(len >> eta) {
-                    res[i].insert(k, self.interpolate_values[i][k]) ;
+                    res[i].insert(k, self.interpolate_values[i][k]);
                 }
             }
         }
@@ -238,16 +259,16 @@ impl<T: Field> FriProver<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::field::fp64::Fp64;
+    use crate::algebra::field::mersenne61_ext::Mersenne61Ext;
     use rand::Rng;
 
     #[test]
     fn batch_inverse_and_mul() {
         let mut vec = vec![];
         for _i in 0..64 {
-            vec.push(Fp64::random_element());
+            vec.push(Mersenne61Ext::random_element());
         }
-        let k = Fp64::random_element();
+        let k = Mersenne61Ext::random_element();
         let mut res1 = vec![];
         for i in &vec {
             res1.push(i.inverse() * k);
@@ -259,9 +280,9 @@ mod tests {
     #[test]
     fn next_evalutation() {
         let polynomial = Polynomial::random_polynomial(64);
-        let domain = Coset::new(512, Fp64::random_element());
+        let domain = Coset::new(512, Mersenne61Ext::random_element());
         let interpolate_value = domain.fft(polynomial.coefficients());
-        let challenge = Fp64::random_element();
+        let challenge = Mersenne61Ext::random_element();
         let eta = 4;
         let res1 = FriProver::evaluation_next_domain(&interpolate_value, &domain, eta, challenge);
 
@@ -283,15 +304,21 @@ mod tests {
 
     #[test]
     fn low_degree_test() {
-        let shift = Fp64::random_element();
+        let shift = Mersenne61Ext::random_element();
         let domain = Coset::new(1 << 10, shift);
         let poly_degree_bound = 1 << 8;
         let poly = Polynomial::random_polynomial(poly_degree_bound);
         let parameter_array = vec![2, 3, 1, 2];
-        let verifier = Rc::new(RefCell::new(
-            FriVerifier::new(&parameter_array, &domain, poly_degree_bound)));
-        let prover = Rc::new(RefCell::new(
-            FriProver::from_polynomial(poly, &parameter_array, &domain)));
+        let verifier = Rc::new(RefCell::new(FriVerifier::new(
+            &parameter_array,
+            &domain,
+            poly_degree_bound,
+        )));
+        let prover = Rc::new(RefCell::new(FriProver::from_polynomial(
+            poly,
+            &parameter_array,
+            &domain,
+        )));
         verifier.borrow_mut().set_prover(&prover);
         prover.borrow_mut().set_verifier(&verifier);
         prover.borrow_mut().prove();
@@ -303,4 +330,3 @@ mod tests {
         assert!(verifier.borrow().verify(points, evaluation));
     }
 }
-

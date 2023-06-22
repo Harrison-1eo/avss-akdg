@@ -1,8 +1,8 @@
-use super::field::Field;
 use super::coset::Coset;
+use super::field::Field;
 
 pub struct Polynomial<T: Field> {
-    coefficients: Vec<T>
+    coefficients: Vec<T>,
 }
 
 impl<T: Field> Polynomial<T> {
@@ -19,8 +19,8 @@ impl<T: Field> Polynomial<T> {
     }
 
     pub fn random_polynomial(degree: usize) -> Polynomial<T> {
-        Polynomial { 
-            coefficients: (0..degree).map(|_| Field::random_element()).collect()
+        Polynomial {
+            coefficients: (0..degree).map(|_| Field::random_element()).collect(),
         }
     }
 
@@ -49,15 +49,15 @@ impl<T: Field> Polynomial<T> {
 
 struct VanishingPolynomial<T: Field> {
     degree: usize,
-    shift: T
+    shift: T,
 }
 
 impl<T: Field> VanishingPolynomial<T> {
     fn new(coset: &Coset<T>) -> VanishingPolynomial<T> {
         let degree = coset.num_elements();
         VanishingPolynomial {
-            degree, 
-            shift: coset.shift().pow(degree as u64)
+            degree,
+            shift: coset.shift().pow(degree as u64),
         }
     }
 
@@ -70,8 +70,8 @@ impl<T: Field> VanishingPolynomial<T> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use super::super::field::fp64::Fp64;
+    use super::*;
 
     #[test]
     fn evaluation() {

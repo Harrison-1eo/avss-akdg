@@ -4,8 +4,6 @@ pub struct Fp64 {
 }
 
 static MOD: u64 = 18446744069414584321u64; // 2**64 - 2**32 + 1
-static ROOT_OF_UNITY: Fp64 = Fp64{ real: 2741030659394132017u64 };
-static LOG_MAX_DEGREE: u64 = 32; // MOD = 2**32 * 4294967295 + 1
 static HIGH: u128 = (1u128 << 127) - (1u128 << 96) + (1u128 << 127);
 static MIDDLE: u128 = (1u128 << 96) - (1u128 << 64);
 static LOW: u128 = (1u128 << 64) - 1;
@@ -14,10 +12,10 @@ impl std::ops::Neg for Fp64 {
     type Output = Fp64;
     fn neg(self) -> Self::Output {
         if self.real == 0 {
-            return self.clone()
+            return self.clone();
         }
         Self {
-            real: MOD - self.real
+            real: MOD - self.real,
         }
     }
 }
@@ -33,9 +31,7 @@ impl std::ops::Add for Fp64 {
         if res >= MOD {
             res -= MOD;
         }
-        Fp64 { 
-            real: res
-        }
+        Fp64 { real: res }
     }
 }
 
@@ -55,9 +51,7 @@ impl std::ops::Sub for Fp64 {
         if res >= MOD {
             res -= MOD;
         }
-        Fp64 {
-            real: res
-        }
+        Fp64 { real: res }
     }
 }
 
@@ -84,9 +78,7 @@ impl std::ops::Mul for Fp64 {
         if ret < product || ret >= MOD {
             ret = ret.wrapping_sub(MOD);
         }
-        Fp64 {
-            real: ret
-        }
+        Fp64 { real: ret }
     }
 }
 
@@ -108,24 +100,25 @@ impl std::fmt::Display for Fp64 {
     }
 }
 
-use rand::Rng;
 use super::Field;
+use rand::Rng;
 
 impl Field for Fp64 {
+    const LOG_ORDER: u64 = 32;
+    const ROOT_OF_UNITY: Fp64 = Fp64 {
+        real: 2741030659394132017u64,
+    };
+
     fn from_int(x: u64) -> Fp64 {
         if x >= MOD {
             panic!("");
         }
-        Fp64 { 
-            real: x
-        }
+        Fp64 { real: x }
     }
-    
+
     fn random_element() -> Self {
         let r: u64 = rand::thread_rng().gen_range(0..MOD);
-        Fp64 { 
-            real: r
-        }
+        Fp64 { real: r }
     }
 
     fn inverse(&self) -> Self {
@@ -134,39 +127,11 @@ impl Field for Fp64 {
         Fp64::ex_gcd(self.real, MOD, &mut x_gcd, &mut y_gcd);
         let module = MOD as i128;
         let r = ((x_gcd % module + module) % module) as u64;
-        Fp64 { 
-            real: r
-        }
-    }
-
-    fn pow(&self, mut n: u64) -> Self {
-        let mut ret = Fp64::from_int(1);
-        let mut base = self.clone();
-        while n != 0 {
-            if n % 2 == 1 {
-                ret *= base;
-            }
-            base *= base;
-            n >>= 1;
-        }
-        ret
+        Fp64 { real: r }
     }
 
     fn is_zero(&self) -> bool {
         self.real == 0
-    }
-
-    fn get_generator(order: usize) -> Self {
-        if (order & (order - 1)) != 0 || order > (1 << LOG_MAX_DEGREE) {
-            panic!("invalid order");
-        }
-        let mut res = ROOT_OF_UNITY;
-        let mut i = 1 << LOG_MAX_DEGREE;
-        while i > order {
-            res *= res;
-            i >>= 1;
-        }
-        res
     }
 }
 
@@ -186,7 +151,7 @@ impl Fp64 {
             let gcd_t = gcd_n;
             gcd_n = *y_gcd - a / b * gcd_n;
             *y_gcd = gcd_t;
-            
+
             let gcd_t = b;
             b = a % b;
             a = gcd_t;
@@ -196,49 +161,14 @@ impl Fp64 {
 
 #[cfg(test)]
 mod tests {
+    use super::super::field_tests::*;
     use super::*;
 
     #[test]
-    fn add_and_sub() {
-        for _i in 0..10 {
-            let a = Fp64::random_element();
-            let b = Fp64::random_element();
-            let c = a + b - a;
-            assert!(b == c)
-        }
-    }
-
-    #[test]
-    fn inverse_and_pow() {
-        for _i in 0..10 {
-            let a = Fp64::random_element();
-            let b = a.inverse();
-            let c = a.pow(MOD - 2);
-            assert_eq!(b, c);
-        }
-    }
-
-    #[test]
-    fn assigns() {
-        for _i in 0..10 {
-            let mut a = Fp64::random_element();
-            let aa = a;
-            let b = Fp64::random_element();
-            a += b;
-            assert_eq!(a, aa + b);
-            a -= b;
-            assert_eq!(a, aa);
-            a *= b;
-            assert_eq!(a, aa * b);
-            a *= b.inverse();
-            assert_eq!(a, aa);
-            assert!((-a + a).is_zero());
-        }
-    }
-
-    #[test]
-    fn generator() {
-        assert_eq!(Fp64::get_generator(1), Fp64::from_int(1));
-        assert_eq!(Fp64::get_generator(1 << 32), ROOT_OF_UNITY);
+    fn test() {
+        add_and_sub::<Fp64>();
+        mult_and_inverse::<Fp64>();
+        assigns::<Fp64>();
+        pow_and_generator::<Fp64>();
     }
 }
