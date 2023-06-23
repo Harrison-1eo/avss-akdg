@@ -1,11 +1,16 @@
+use crate::algebra::{
+    coset::Coset,
+    field::{as_bytes_vec, Field},
+    polynomial::*,
+};
+use crate::merkle_tree::{MerkleTreeProver, MerkleTreeVerifier};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
-use crate::algebra::{coset::Coset, field::Field, polynomial::*};
 
 pub struct FriProver<T: Field> {
     log_poly_degree: usize,
     coset: Coset<T>,
     interpolate_values: Vec<Vec<T>>,
+    merkle_tree: Vec<MerkleTreeProver>,
     verifier: Option<Rc<RefCell<FriVerifier<T>>>>,
 }
 
@@ -13,22 +18,28 @@ pub struct FriVerifier<T: Field> {
     coset: Coset<T>,
     log_poly_degree: usize,
     challenges: Vec<T>,
+    merkle_root: Vec<MerkleTreeVerifier>,
     prover: Option<Rc<RefCell<FriProver<T>>>>,
     final_value: Option<T>,
 }
 
 impl<T: Field> FriVerifier<T> {
-    pub fn new(
-        coset: &Coset<T>,
-        log_poly_degree: usize,
-    ) -> FriVerifier<T> {
+    pub fn new(coset: &Coset<T>, log_poly_degree: usize) -> FriVerifier<T> {
         FriVerifier {
             coset: coset.clone(),
             log_poly_degree,
             challenges: vec![],
+            merkle_root: vec![],
             prover: None,
             final_value: None,
         }
+    }
+
+    fn receive_root(&mut self, leave_number: usize, merkle_root: &[u8; 32]) {
+        self.merkle_root.push(MerkleTreeVerifier {
+            leave_number,
+            merkle_root: merkle_root.clone(),
+        })
     }
 
     fn get_challenge(&mut self) -> T {
@@ -41,29 +52,42 @@ impl<T: Field> FriVerifier<T> {
         self.prover = Some(prover.clone());
     }
 
-    pub fn verify(&self, mut points: Vec<usize>, evaluation: Vec<HashMap<usize, T>>) -> bool {
+    pub fn verify(
+        &self,
+        mut leaf_indices: Vec<usize>,
+        mut evaluation: Vec<(Vec<u8>, HashMap<usize, T>)>,
+    ) -> bool {
         let mut shift_inv = self.coset.shift().inverse();
         let mut generator_inv = self.coset.generator().inverse();
         let mut len = self.coset.num_elements();
         for i in 0..self.log_poly_degree {
-            points = points.iter_mut().map(|v| *v % (len >> 1)).collect();
-            points.sort();
-            let mut query_list = vec![];
-            query_list.push(points[0]);
-            for j in 1..points.len() {
-                if points[j] != points[j - 1] {
-                    query_list.push(points[j]);
-                }
-            }
-            points = query_list;
+            leaf_indices = leaf_indices.iter_mut().map(|v| *v % (len >> 1)).collect();
+            leaf_indices.sort();
+            leaf_indices.dedup();
+            let (proof_bytes, values) = evaluation.remove(0);
 
-            for j in 0..points.len() {
-                let x = evaluation[i].get(&points[j]).unwrap().clone();
-                let nx = evaluation[i].get(&(points[j] + len / 2)).unwrap().clone();
-                let v = x + nx + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(points[j] as u64);
+            let open_values = leaf_indices
+                .iter()
+                .map(|v| {
+                    as_bytes_vec(&[
+                        values.get(v).unwrap().clone(),
+                        values.get(&(v + len / 2)).unwrap().clone(),
+                    ])
+                })
+                .collect();
+            if !self.merkle_root[i].verify(proof_bytes, &leaf_indices, &open_values) {
+                return false;
+            }
+
+            for j in &leaf_indices {
+                let x = values.get(j).unwrap().clone();
+                let nx = values.get(&(j + len / 2)).unwrap().clone();
+                let v = x
+                    + nx
+                    + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(*j as u64);
                 let v = v * T::from_int(2).inverse();
                 if i < self.log_poly_degree - 1 {
-                    if v != *evaluation[i + 1].get(&points[j]).expect("query missing") {
+                    if v != *evaluation[0].1.get(&j).expect("query missing") {
                         return false;
                     }
                 } else {
@@ -94,6 +118,7 @@ impl<T: Field> FriProver<T> {
             log_poly_degree,
             coset: coset.clone(),
             interpolate_values: vec![interpolate_value],
+            merkle_tree: vec![],
             verifier: None,
         }
     }
@@ -109,6 +134,7 @@ impl<T: Field> FriProver<T> {
             log_poly_degree,
             coset: coset.clone(),
             interpolate_values,
+            merkle_tree: vec![],
             verifier: None,
         }
     }
@@ -135,9 +161,9 @@ impl<T: Field> FriProver<T> {
     }
 
     fn evaluation_next_domain(
-        interpolate_value: &Vec<T>, 
+        interpolate_value: &Vec<T>,
         current_domain: &Coset<T>,
-        challenge: T
+        challenge: T,
     ) -> Vec<T> {
         let mut res = vec![];
         assert_eq!(interpolate_value.len(), current_domain.num_elements());
@@ -154,13 +180,26 @@ impl<T: Field> FriProver<T> {
         res
     }
 
+    fn merkle_tree_commit(value: &Vec<T>) -> MerkleTreeProver {
+        let mut leaf_values = vec![];
+        for i in 0..(value.len() / 2) {
+            leaf_values.push(as_bytes_vec(&[value[i], value[i + value.len() / 2]]));
+        }
+        MerkleTreeProver::new(leaf_values)
+    }
+
     pub fn prove(&mut self) {
         let mut domain_size = self.coset.num_elements();
         let mut domain = self.coset.clone();
         let mut shift = domain.shift();
         let verifier = self.verifier.clone().unwrap();
         for _i in 0..self.log_poly_degree {
-            // todo: merkle tree commit
+            let merkle_tree_prover =
+                Self::merkle_tree_commit(self.interpolate_values.last().unwrap());
+            let commit = merkle_tree_prover.commit();
+            verifier.borrow_mut().receive_root(domain_size / 2, &commit);
+            self.merkle_tree.push(merkle_tree_prover);
+
             let challenge = verifier.borrow_mut().get_challenge();
             let next_evalutation = Self::evaluation_next_domain(
                 &self.interpolate_values.last().unwrap(),
@@ -169,36 +208,33 @@ impl<T: Field> FriProver<T> {
             );
             self.interpolate_values.push(next_evalutation);
             shift *= shift;
-            
+
             domain_size >>= 1;
             domain = Coset::new(domain_size, shift);
         }
 
-        verifier.borrow_mut().set_final_value(self.interpolate_values.last().unwrap()[0]);
+        verifier
+            .borrow_mut()
+            .set_final_value(self.interpolate_values.last().unwrap()[0]);
     }
 
-    pub fn query(&self, points: &Vec<usize>) -> Vec<HashMap<usize, T>> {
+    pub fn query(&self, points: &Vec<usize>) -> Vec<(Vec<u8>, HashMap<usize, T>)> {
         let mut res = vec![];
-        let mut points = points.clone();
+        let mut leaf_indices = points.clone();
         for i in 0..self.log_poly_degree {
-            res.push(HashMap::new());
             let len = self.interpolate_values[i].len();
 
-            points = points.iter_mut().map(|v| *v % (len >> 1)).collect();
-            points.sort();
-            let mut query_list = vec![];
-            query_list.push(points[0]);
-            for j in 1..points.len() {
-                if points[j] != points[j - 1] {
-                    query_list.push(points[j]);
-                }
+            leaf_indices = leaf_indices.iter_mut().map(|v| *v % (len >> 1)).collect();
+            leaf_indices.sort();
+            leaf_indices.dedup();
+
+            let mut values = HashMap::new();
+            for j in &leaf_indices {
+                values.insert(*j, self.interpolate_values[i][*j]);
+                values.insert(j + len / 2, self.interpolate_values[i][*j + len / 2]);
             }
-            points = query_list;
-            for j in &points {
-                for k in (*j..len).step_by(len >> 1) {
-                    res[i].insert(k, self.interpolate_values[i][k]);
-                }
-            }
+            let proof_bytes = self.merkle_tree[i].open(&leaf_indices);
+            res.push((proof_bytes, values));
         }
         res
     }
@@ -231,20 +267,13 @@ mod tests {
         let domain = Coset::new(1 << 10, shift);
         let poly_degree_bound = 1 << 8;
         let poly = Polynomial::random_polynomial(poly_degree_bound);
-        let verifier = Rc::new(RefCell::new(FriVerifier::new(
-            &domain,
-            8,
-        )));
-        let prover = Rc::new(RefCell::new(FriProver::from_polynomial(
-            8,
-            poly,
-            &domain,
-        )));
+        let verifier = Rc::new(RefCell::new(FriVerifier::new(&domain, 8)));
+        let prover = Rc::new(RefCell::new(FriProver::from_polynomial(8, poly, &domain)));
         verifier.borrow_mut().set_prover(&prover);
         prover.borrow_mut().set_verifier(&verifier);
         prover.borrow_mut().prove();
         let mut points = vec![];
-        for _i in 0..1 {
+        for _i in 0..10 {
             points.push(rand::thread_rng().gen_range(0..domain.num_elements()));
         }
         let evaluation = prover.borrow().query(&points);
