@@ -153,6 +153,11 @@ impl super::Field for Mersenne61Ext {
         }
         ret
     }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let x = self.real.to_le_bytes().to_vec();
+        x
+    }
 }
 
 #[cfg(test)]

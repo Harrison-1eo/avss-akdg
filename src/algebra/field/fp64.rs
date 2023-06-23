@@ -133,6 +133,11 @@ impl Field for Fp64 {
     fn is_zero(&self) -> bool {
         self.real == 0
     }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let x = self.real.to_le_bytes().to_vec();
+        x
+    }
 }
 
 impl Fp64 {

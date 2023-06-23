@@ -23,6 +23,7 @@ pub trait Field:
     fn random_element() -> Self;
     fn inverse(&self) -> Self;
     fn is_zero(&self) -> bool;
+    fn to_bytes(&self) -> Vec<u8>;
 
     fn get_generator(order: usize) -> Self {
         if (order & (order - 1)) != 0 || order > (1 << Self::LOG_ORDER) {
@@ -49,6 +50,14 @@ pub trait Field:
         }
         ret
     }
+}
+
+pub fn as_bytes_vec<T: Field>(s: &[T]) -> Vec<u8> {
+    let mut res = vec![];
+    for i in s {
+        res.append(&mut i.to_bytes());
+    }
+    res
 }
 
 mod field_tests {
