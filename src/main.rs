@@ -1,8 +1,5 @@
 mod algebra;
-mod hash {
-    mod merkel_tree;
-    mod sha256;
-}
+mod merkle_tree;
 mod protocal {
     mod fri;
 }
