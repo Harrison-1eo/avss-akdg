@@ -3,34 +3,31 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::algebra::{coset::Coset, field::Field, polynomial::*};
 
 pub struct FriProver<T: Field> {
-    parameter_array: Vec<usize>,
+    log_poly_degree: usize,
     coset: Coset<T>,
     interpolate_values: Vec<Vec<T>>,
     verifier: Option<Rc<RefCell<FriVerifier<T>>>>,
 }
 
 pub struct FriVerifier<T: Field> {
-    parameter_array: Vec<usize>,
     coset: Coset<T>,
-    poly_degree_bound: usize,
+    log_poly_degree: usize,
     challenges: Vec<T>,
     prover: Option<Rc<RefCell<FriProver<T>>>>,
-    final_poly: Option<Polynomial<T>>,
+    final_value: Option<T>,
 }
 
 impl<T: Field> FriVerifier<T> {
     pub fn new(
-        parameter_array: &Vec<usize>,
         coset: &Coset<T>,
-        poly_degree_bound: usize,
+        log_poly_degree: usize,
     ) -> FriVerifier<T> {
         FriVerifier {
-            parameter_array: parameter_array.clone(),
             coset: coset.clone(),
-            poly_degree_bound,
+            log_poly_degree,
             challenges: vec![],
             prover: None,
-            final_poly: None,
+            final_value: None,
         }
     }
 
@@ -45,12 +42,11 @@ impl<T: Field> FriVerifier<T> {
     }
 
     pub fn verify(&self, mut points: Vec<usize>, evaluation: Vec<HashMap<usize, T>>) -> bool {
-        let mut shift = self.coset.shift();
-        let mut generator = self.coset.generator();
+        let mut shift_inv = self.coset.shift().inverse();
+        let mut generator_inv = self.coset.generator().inverse();
         let mut len = self.coset.num_elements();
-        for i in 0..self.parameter_array.len() {
-            let eta = self.parameter_array[i];
-            points = points.iter_mut().map(|v| *v % (len >> eta)).collect();
+        for i in 0..self.log_poly_degree {
+            points = points.iter_mut().map(|v| *v % (len >> 1)).collect();
             points.sort();
             let mut query_list = vec![];
             query_list.push(points[0]);
@@ -62,54 +58,40 @@ impl<T: Field> FriVerifier<T> {
             points = query_list;
 
             for j in 0..points.len() {
-                let mut tmp = vec![];
-                for k in (points[j]..len).step_by(len >> eta) {
-                    tmp.push(evaluation[i].get(&k).unwrap().clone());
-                }
-                let coset = Coset::new(1 << eta, shift * generator.pow(points[j] as u64));
-                let poly = Polynomial::new(coset.ifft(&tmp));
-                let v = poly.evaluation_at(self.challenges[i]);
-                if i < self.parameter_array.len() - 1 {
+                let x = evaluation[i].get(&points[j]).unwrap().clone();
+                let nx = evaluation[i].get(&(points[j] + len / 2)).unwrap().clone();
+                let v = x + nx + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(points[j] as u64);
+                let v = v * T::from_int(2).inverse();
+                if i < self.log_poly_degree - 1 {
                     if v != *evaluation[i + 1].get(&points[j]).expect("query missing") {
                         return false;
                     }
                 } else {
-                    let x = shift.pow(1 << eta as u64) * generator.pow((points[j] << eta) as u64);
-                    let poly_v = self.final_poly.as_ref().unwrap().evaluation_at(x);
-                    if v != poly_v {
+                    if v != self.final_value.unwrap() {
                         return false;
                     }
                 }
             }
-            for _j in 0..eta {
-                shift *= shift;
-                generator *= generator;
-            }
-            len >>= eta;
+            shift_inv *= shift_inv;
+            generator_inv *= generator_inv;
+            len >>= 1;
         }
         true
     }
 
-    fn set_final_poly(&mut self, final_poly: Polynomial<T>) {
-        let mut d = self.poly_degree_bound;
-        for i in &self.parameter_array {
-            d >>= *i;
-        }
-        if final_poly.degree() > d {
-            panic!("invalid final polynomial");
-        }
-        self.final_poly = Some(final_poly);
+    fn set_final_value(&mut self, final_value: T) {
+        self.final_value = Some(final_value);
     }
 }
 
 impl<T: Field> FriProver<T> {
     pub fn new(
+        log_poly_degree: usize,
         interpolate_value: Vec<T>,
-        parameter_array: &Vec<usize>,
         coset: &Coset<T>,
     ) -> FriProver<T> {
         FriProver {
-            parameter_array: parameter_array.clone(),
+            log_poly_degree,
             coset: coset.clone(),
             interpolate_values: vec![interpolate_value],
             verifier: None,
@@ -117,13 +99,14 @@ impl<T: Field> FriProver<T> {
     }
 
     pub fn from_polynomial(
+        log_poly_degree: usize,
         polynomial: Polynomial<T>,
-        parameter_array: &Vec<usize>,
         coset: &Coset<T>,
     ) -> FriProver<T> {
+        assert_eq!(1 << log_poly_degree, polynomial.degree() + 1);
         let interpolate_values = vec![polynomial.evaluation_over_coset(coset)];
         FriProver {
-            parameter_array: parameter_array.clone(),
+            log_poly_degree,
             coset: coset.clone(),
             interpolate_values,
             verifier: None,
@@ -152,54 +135,23 @@ impl<T: Field> FriProver<T> {
     }
 
     fn evaluation_next_domain(
-        interpolate_value: &Vec<T>,
+        interpolate_value: &Vec<T>, 
         current_domain: &Coset<T>,
-        eta: usize,
-        challenge: T,
+        challenge: T
     ) -> Vec<T> {
-        let coset_size = 1 << eta;
-        let num_coset = current_domain.num_elements() / coset_size;
-        let h_inc = current_domain.generator();
-        let h_inc_to_coset_inv_plus_one = h_inc.pow(coset_size as u64).inverse() * h_inc;
-        let shiftless_coset = Coset::new(coset_size, T::from_int(1));
-        let g = shiftless_coset.generator();
-        let g_inv = g.inverse();
-        let x_to_ordet_coset = challenge.pow(coset_size as u64);
-        let mut shifted_x_elements = Vec::with_capacity(coset_size);
-        shifted_x_elements.push(challenge);
-        for i in 1..coset_size {
-            shifted_x_elements.push(shifted_x_elements[i - 1] * g_inv);
+        let mut res = vec![];
+        assert_eq!(interpolate_value.len(), current_domain.num_elements());
+        let inv_2 = T::from_int(2).inverse();
+        let mut shift_inv = current_domain.shift().inverse();
+        let generator_inv = current_domain.generator().inverse();
+        for i in 0..(interpolate_value.len() / 2) {
+            let x = interpolate_value[i];
+            let nx = interpolate_value[i + interpolate_value.len() / 2];
+            let new_v = (x + nx) + challenge * (x - nx) * shift_inv;
+            res.push(new_v * inv_2);
+            shift_inv *= generator_inv;
         }
-        let mut cur_h = current_domain.shift();
-        let first_h_to_coset_inv_plus_one = cur_h.pow(coset_size as u64).inverse() * cur_h;
-        let mut cur_coset_constant_plus_h = x_to_ordet_coset * first_h_to_coset_inv_plus_one;
-        let mut elements_to_invert = Vec::with_capacity(interpolate_value.len());
-        let mut constant_for_each_coset = Vec::with_capacity(num_coset);
-
-        let constant_for_all_coset = T::from_int(coset_size as u64).inverse();
-        for _i in 0..num_coset {
-            let coset_contant = cur_coset_constant_plus_h - cur_h;
-            constant_for_each_coset.push(coset_contant);
-            assert_ne!(coset_contant, T::from_int(0));
-            for k in 0..coset_size {
-                elements_to_invert.push(shifted_x_elements[k] - cur_h);
-            }
-            cur_h *= h_inc;
-            cur_coset_constant_plus_h *= h_inc_to_coset_inv_plus_one;
-        }
-        let lagrange_coefficients =
-            Self::batch_inverse_and_mul(elements_to_invert, constant_for_all_coset);
-        let mut next_interpolate_value = Vec::with_capacity(num_coset);
-        for j in 0..num_coset {
-            let mut interpolation = T::from_int(0);
-            for k in 0..coset_size {
-                interpolation += interpolate_value[k * num_coset + j]
-                    * lagrange_coefficients[j * coset_size + k];
-            }
-            interpolation *= constant_for_each_coset[j];
-            next_interpolate_value.push(interpolation);
-        }
-        next_interpolate_value
+        res
     }
 
     pub fn prove(&mut self) {
@@ -207,36 +159,32 @@ impl<T: Field> FriProver<T> {
         let mut domain = self.coset.clone();
         let mut shift = domain.shift();
         let verifier = self.verifier.clone().unwrap();
-        for i in 0..self.parameter_array.len() {
-            let eta = self.parameter_array[i];
+        for _i in 0..self.log_poly_degree {
             // todo: merkle tree commit
             let challenge = verifier.borrow_mut().get_challenge();
             let next_evalutation = Self::evaluation_next_domain(
                 &self.interpolate_values.last().unwrap(),
                 &domain,
-                eta,
                 challenge,
             );
             self.interpolate_values.push(next_evalutation);
-            for _j in 0..eta {
-                shift *= shift;
-            }
-            domain_size >>= eta;
+            shift *= shift;
+            
+            domain_size >>= 1;
             domain = Coset::new(domain_size, shift);
         }
-        let final_poly = Polynomial::new(domain.ifft(self.interpolate_values.last().unwrap()));
-        verifier.borrow_mut().set_final_poly(final_poly);
+
+        verifier.borrow_mut().set_final_value(self.interpolate_values.last().unwrap()[0]);
     }
 
     pub fn query(&self, points: &Vec<usize>) -> Vec<HashMap<usize, T>> {
         let mut res = vec![];
         let mut points = points.clone();
-        for i in 0..self.parameter_array.len() {
+        for i in 0..self.log_poly_degree {
             res.push(HashMap::new());
             let len = self.interpolate_values[i].len();
-            let eta = self.parameter_array[i];
 
-            points = points.iter_mut().map(|v| *v % (len >> eta)).collect();
+            points = points.iter_mut().map(|v| *v % (len >> 1)).collect();
             points.sort();
             let mut query_list = vec![];
             query_list.push(points[0]);
@@ -247,7 +195,7 @@ impl<T: Field> FriProver<T> {
             }
             points = query_list;
             for j in &points {
-                for k in (*j..len).step_by(len >> eta) {
+                for k in (*j..len).step_by(len >> 1) {
                     res[i].insert(k, self.interpolate_values[i][k]);
                 }
             }
@@ -278,45 +226,18 @@ mod tests {
     }
 
     #[test]
-    fn next_evalutation() {
-        let polynomial = Polynomial::random_polynomial(64);
-        let domain = Coset::new(512, Mersenne61Ext::random_element());
-        let interpolate_value = domain.fft(polynomial.coefficients());
-        let challenge = Mersenne61Ext::random_element();
-        let eta = 4;
-        let res1 = FriProver::evaluation_next_domain(&interpolate_value, &domain, eta, challenge);
-
-        let num_coset = interpolate_value.len() / (1 << eta);
-        let mut res2 = Vec::with_capacity(num_coset);
-        let mut shift = domain.shift();
-        for i in 0..num_coset {
-            let mut value = vec![];
-            for j in 0..(1 << eta) {
-                value.push(interpolate_value[j * num_coset + i]);
-            }
-            let coset = Coset::new(1 << eta, shift);
-            let poly = Polynomial::new(coset.ifft(&value));
-            res2.push(poly.evaluation_at(challenge));
-            shift *= domain.generator();
-        }
-        assert_eq!(res1, res2);
-    }
-
-    #[test]
     fn low_degree_test() {
         let shift = Mersenne61Ext::random_element();
         let domain = Coset::new(1 << 10, shift);
         let poly_degree_bound = 1 << 8;
         let poly = Polynomial::random_polynomial(poly_degree_bound);
-        let parameter_array = vec![2, 3, 1, 2];
         let verifier = Rc::new(RefCell::new(FriVerifier::new(
-            &parameter_array,
             &domain,
-            poly_degree_bound,
+            8,
         )));
         let prover = Rc::new(RefCell::new(FriProver::from_polynomial(
+            8,
             poly,
-            &parameter_array,
             &domain,
         )));
         verifier.borrow_mut().set_prover(&prover);
