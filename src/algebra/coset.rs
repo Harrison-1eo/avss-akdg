@@ -125,14 +125,14 @@ impl<T: Field> Coset<T> {
         elements.clone()
     }
 
-    pub fn num_elements(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.fft_eval_domain.order()
     }
 
     pub fn fft(&self, evals: &Vec<T>) -> Vec<T> {
-        assert!(self.num_elements() >= evals.len());
+        assert!(self.size() >= evals.len());
         let mut a = evals.clone();
-        let n = self.num_elements() as i64 - a.len() as i64;
+        let n = self.size() as i64 - a.len() as i64;
         for _i in 0..n {
             a.push(T::from_int(0));
         }

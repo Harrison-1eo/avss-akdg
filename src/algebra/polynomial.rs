@@ -54,7 +54,7 @@ struct VanishingPolynomial<T: Field> {
 
 impl<T: Field> VanishingPolynomial<T> {
     fn new(coset: &Coset<T>) -> VanishingPolynomial<T> {
-        let degree = coset.num_elements();
+        let degree = coset.size();
         VanishingPolynomial {
             degree,
             shift: coset.shift().pow(degree as u64),
@@ -79,7 +79,7 @@ mod test {
         let all_elements = coset.all_elements();
         let poly = Polynomial::random_polynomial(32);
         let eval = poly.evaluation_over_coset(&coset);
-        for i in 0..coset.num_elements() {
+        for i in 0..coset.size() {
             assert_eq!(eval[i], poly.evaluation_at(all_elements[i]));
         }
         let poly = VanishingPolynomial::new(&coset);

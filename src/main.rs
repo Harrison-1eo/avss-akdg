@@ -5,7 +5,7 @@ mod algebra {
 }
 mod merkle_tree;
 mod protocal {
-    mod fri;
+    mod rolling_fri;
 }
 
 fn main() {
