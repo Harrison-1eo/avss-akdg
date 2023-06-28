@@ -1,9 +1,6 @@
 use super::prover::RollingFriProver;
 use super::QueryResult;
-use crate::algebra::{
-    coset::Coset,
-    field::{as_bytes_vec, Field},
-};
+use crate::algebra::{coset::Coset, field::Field};
 use crate::merkle_tree::MerkleTreeVerifier;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -85,6 +82,7 @@ impl<T: Field> RollingFriVerifier<T> {
                 .collect();
             leaf_indices.sort();
             leaf_indices.dedup();
+
             let folding_values = if i == 0 {
                 let query_results = function_proofs.remove(0);
                 for j in 0..query_results.len() {
@@ -94,20 +92,22 @@ impl<T: Field> RollingFriVerifier<T> {
                         Some(domain_size / 2),
                     );
                 }
-                let mut interpolation_value = HashMap::new();
-                for j in &leaf_indices {
-                    let values: Vec<T> = query_results
-                        .iter()
-                        .map(|x| x.proof_values.get(j).unwrap().clone())
-                        .collect();
-                    interpolation_value.insert(*j, self.function_maps[0](values));
-                    let values: Vec<T> = query_results
-                        .iter()
-                        .map(|x| x.proof_values.get(&(j + domain_size / 2)).unwrap().clone())
-                        .collect();
-                    interpolation_value.insert(j + domain_size / 2, self.function_maps[0](values));
-                }
-                interpolation_value
+                leaf_indices
+                    .iter()
+                    .flat_map(|j| {
+                        let values: Vec<T> = query_results
+                            .iter()
+                            .map(|x| x.proof_values.get(j).unwrap().clone())
+                            .collect();
+                        let value1 = self.function_maps[i](values);
+                        let values: Vec<T> = query_results
+                            .iter()
+                            .map(|x| x.proof_values.get(&(j + domain_size / 2)).unwrap().clone())
+                            .collect();
+                        let value2 = self.function_maps[i](values);
+                        [(*j, value1), (*j + domain_size / 2, value2)]
+                    })
+                    .collect()
             } else {
                 let query_result = folding_proofs.remove(0);
                 query_result.verify_merkle_tree(

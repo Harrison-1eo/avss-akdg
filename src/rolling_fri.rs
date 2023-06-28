@@ -71,7 +71,6 @@ mod tests {
                     coset.fft(poly.coefficients())
                 })
                 .collect();
-            assert_eq!(poly_eval.len(), 2);
             functions.push(poly_eval);
             function_maps
                 .push(|x: Vec<Mersenne61Ext>| x[0] + Mersenne61Ext::from_int(19260817) * x[1]);

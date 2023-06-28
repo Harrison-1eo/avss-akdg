@@ -5,63 +5,85 @@ use crate::algebra::{
     field::{as_bytes_vec, Field},
 };
 use crate::merkle_tree::MerkleTreeProver;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-trait InterpolateValue<T: Field> {
-    fn get_value(&self, index: usize) -> T;
+struct InterpolateValue<T: Field> {
+    value: Vec<T>,
+    merkle_tree: MerkleTreeProver,
 }
 
-struct FunctionValues<T: Field> {
-    functions: Vec<Vec<T>>,
+impl<T: Field> InterpolateValue<T> {
+    fn new(value: Vec<T>, half: bool) -> Self {
+        let merkle_tree = MerkleTreeProver::new(if half {
+            let len = value.len() / 2;
+            (0..len)
+                .map(|i| as_bytes_vec(&[value[i], value[i + len]]))
+                .collect()
+        } else {
+            let len = value.len();
+            (0..len).map(|i| as_bytes_vec(&[value[i]])).collect()
+        });
+        Self {
+            value: value,
+            merkle_tree: merkle_tree,
+        }
+    }
+
+    fn query(&self, leaf_indices: &Vec<usize>, half: bool) -> QueryResult<T> {
+        if half {
+            let len = self.value.len() / 2;
+            let proof_values = leaf_indices
+                .iter()
+                .flat_map(|j| [(*j, self.value[*j]), (*j + len, self.value[*j + len])])
+                .collect();
+            let proof_bytes = self.merkle_tree.open(&leaf_indices);
+            QueryResult {
+                proof_bytes,
+                proof_values,
+            }
+        } else {
+            let proof_values = leaf_indices.iter().map(|j| (*j, self.value[*j])).collect();
+            let proof_bytes = self.merkle_tree.open(&leaf_indices);
+            QueryResult {
+                proof_bytes,
+                proof_values,
+            }
+        }
+    }
+}
+
+struct FunctionValue<T: Field> {
+    interpolates: Vec<InterpolateValue<T>>,
     map: fn(Vec<T>) -> T,
 }
 
-impl<T: Field> FunctionValues<T> {
+impl<T: Field> FunctionValue<T> {
+    fn new(values: Vec<Vec<T>>, map: fn(Vec<T>) -> T, half: bool) -> Self {
+        Self {
+            interpolates: values
+                .into_iter()
+                .map(|x| InterpolateValue::new(x, half))
+                .collect(),
+            map,
+        }
+    }
+
     fn get_value(&self, index: usize) -> T {
-        let v = self.functions.iter().map(|x| x[index]).collect();
+        let v = self.interpolates.iter().map(|x| x.value[index]).collect();
         let map = self.map;
-        let res = map(v);
-        res
+        map(v)
     }
 
-    fn to_interpolate_values(&self) -> Vec<T> {
-        (0..self.leave_number())
-            .map(|i| {
-                let v = self.functions.iter().map(|x| x[i]).collect();
-                let map = self.map;
-                map(v)
-            })
-            .collect()
-    }
-
-    fn commit(&self, half: bool) -> Vec<MerkleTreeProver> {
-        self.functions
-            .iter()
-            .map(|x| {
-                MerkleTreeProver::new(if half {
-                    let len = x.len() / 2;
-                    (0..len)
-                        .map(|i| as_bytes_vec(&[x[i], x[i + len]]))
-                        .collect()
-                } else {
-                    (0..x.len()).map(|i| as_bytes_vec(&[x[i]])).collect()
-                })
-            })
-            .collect()
-    }
-
-    fn leave_number(&self) -> usize {
-        self.functions[0].len()
+    fn field_size(&self) -> usize {
+        self.interpolates[0].value.len()
     }
 }
 
 pub struct RollingFriProver<T: Field> {
     total_round: usize,
     coset: Coset<T>,
-    functions: Vec<FunctionValues<T>>,
-    folding_values: Vec<Vec<T>>,
-    functions_tree: Vec<Vec<MerkleTreeProver>>,
-    folding_tree: Vec<MerkleTreeProver>,
+    functions: Vec<FunctionValue<T>>,
+    foldings: Vec<InterpolateValue<T>>,
     verifier: Option<Rc<RefCell<RollingFriVerifier<T>>>>,
 }
 
@@ -79,14 +101,10 @@ impl<T: Field> RollingFriProver<T> {
             functions: function_values
                 .into_iter()
                 .zip(function_maps.into_iter())
-                .map(|(x, y)| FunctionValues {
-                    functions: x,
-                    map: y,
-                })
+                .enumerate()
+                .map(|(i, (x, y))| FunctionValue::new(x, y, i == 0))
                 .collect(),
-            folding_values: vec![vec![]],
-            functions_tree: vec![],
-            folding_tree: vec![MerkleTreeProver::new(vec![])],
+            foldings: vec![],
             verifier: None,
         }
     }
@@ -98,19 +116,21 @@ impl<T: Field> RollingFriProver<T> {
     pub fn commit_functions(&mut self) {
         let verifier = self.verifier.clone().unwrap();
         for (idx, fv) in self.functions.iter().enumerate() {
-            let merkle_prover = fv.commit(idx == 0);
-            let commit = merkle_prover.iter().map(|x| x.commit()).collect();
+            let commit = fv
+                .interpolates
+                .iter()
+                .map(|x| x.merkle_tree.commit())
+                .collect();
 
             verifier.borrow_mut().set_function_root(
                 if idx == 0 {
-                    fv.leave_number() / 2
+                    fv.field_size() / 2
                 } else {
-                    fv.leave_number()
+                    fv.field_size()
                 },
                 commit,
                 fv.map,
             );
-            self.functions_tree.push(merkle_prover);
         }
     }
 
@@ -122,21 +142,20 @@ impl<T: Field> RollingFriProver<T> {
     ) -> Vec<T> {
         let mut res = vec![];
         let len = if round == 0 {
-            self.functions[round].leave_number()
+            self.functions[round].field_size()
         } else {
-            self.folding_values[round].len()
+            self.foldings[round - 1].value.len()
         };
         let get_folding_value = |i: usize| {
             if round == 0 {
                 let fv = &self.functions[round];
-                let v = fv.functions.iter().map(|x| x[i]).collect();
+                let v = fv.interpolates.iter().map(|x| x.value[i]).collect();
                 let map = fv.map;
                 map(v)
             } else {
-                self.folding_values[round][i]
+                self.foldings[round - 1].value[i]
             }
         };
-        assert_eq!(len, current_domain.size());
         let inv_2 = T::from_int(2).inverse();
         let mut shift_inv = current_domain.shift().inverse();
         let generator_inv = current_domain.generator().inverse();
@@ -154,14 +173,6 @@ impl<T: Field> RollingFriProver<T> {
         res
     }
 
-    fn merkle_tree_commit(value: &Vec<T>) -> MerkleTreeProver {
-        let mut leaf_values = vec![];
-        for i in 0..(value.len() / 2) {
-            leaf_values.push(as_bytes_vec(&[value[i], value[i + value.len() / 2]]));
-        }
-        MerkleTreeProver::new(leaf_values)
-    }
-
     pub fn prove(&mut self) {
         let mut domain_size = self.coset.size();
         let mut domain = self.coset.clone();
@@ -170,24 +181,20 @@ impl<T: Field> RollingFriProver<T> {
         for i in 0..self.total_round {
             let challenge = verifier.borrow_mut().get_challenge();
             let next_evalutation = self.evaluation_next_domain(i, &domain, challenge);
-            self.folding_values.push(next_evalutation);
 
             shift *= shift;
             domain_size >>= 1;
             domain = Coset::new(domain_size, shift);
 
             if i < self.total_round - 1 {
-                let merkle_tree_prover =
-                    Self::merkle_tree_commit(self.folding_values.last().unwrap());
-                let commit = merkle_tree_prover.commit();
+                let interpolate_value = InterpolateValue::new(next_evalutation, true);
+                let commit = interpolate_value.merkle_tree.commit();
+                self.foldings.push(interpolate_value);
                 verifier.borrow_mut().receive_root(domain_size / 2, &commit);
-                self.folding_tree.push(merkle_tree_prover);
+            } else {
+                verifier.borrow_mut().set_final_value(next_evalutation[0]);
             }
         }
-
-        verifier
-            .borrow_mut()
-            .set_final_value(self.folding_values.last().unwrap()[0]);
     }
 
     pub fn query(&self, points: &Vec<usize>) -> (Vec<QueryResult<T>>, Vec<Vec<QueryResult<T>>>) {
@@ -196,64 +203,32 @@ impl<T: Field> RollingFriProver<T> {
         let mut leaf_indices = points.clone();
 
         for i in 0..self.total_round {
-            let len = self.functions[i].leave_number();
+            let len = self.functions[i].field_size();
 
             leaf_indices = leaf_indices.iter_mut().map(|v| *v % (len >> 1)).collect();
             leaf_indices.sort();
             leaf_indices.dedup();
 
-            if i == 0 {
-                let query_result = self.functions[i]
-                    .functions
+            let f = |x: &FunctionValue<T>, y| {
+                x.interpolates
                     .iter()
-                    .zip(self.functions_tree[i].iter())
-                    .map(|(v, p)| {
-                        let mut proof_values = HashMap::new();
-                        for k in &leaf_indices {
-                            proof_values.insert(*k, v[*k]);
-                            proof_values.insert(*k + len / 2, v[*k + len / 2]);
-                        }
-                        let proof_bytes = p.open(&leaf_indices);
-                        QueryResult {
-                            proof_bytes,
-                            proof_values,
-                        }
-                    })
-                    .collect();
+                    .map(|x| x.query(&leaf_indices, y))
+                    .collect::<Vec<QueryResult<T>>>()
+            };
+            if i == 0 {
+                let query_result = f(&self.functions[i], true);
                 functions_res.push(query_result);
             }
 
             if i < self.total_round - 1 {
-                let query_result = self.functions[i + 1]
-                    .functions
-                    .iter()
-                    .zip(self.functions_tree[i + 1].iter())
-                    .map(|(v, p)| {
-                        let mut proof_values = HashMap::new();
-                        for k in &leaf_indices {
-                            proof_values.insert(*k, v[*k]);
-                        }
-                        let proof_bytes = p.open(&leaf_indices);
-                        QueryResult {
-                            proof_bytes,
-                            proof_values,
-                        }
-                    })
-                    .collect();
+                let query_result = f(&self.functions[i + 1], false);
                 functions_res.push(query_result);
             }
 
             if i > 0 {
-                let mut values = HashMap::new();
-                for j in &leaf_indices {
-                    values.insert(*j, self.folding_values[i][*j]);
-                    values.insert(j + len / 2, self.folding_values[i][*j + len / 2]);
-                }
-                let proof_bytes = self.folding_tree[i].open(&leaf_indices);
-                folding_res.push(QueryResult {
-                    proof_bytes,
-                    proof_values: values,
-                });
+                folding_res.push(
+                    self.foldings[i - 1].query(&leaf_indices, true),
+                );
             }
         }
         (folding_res, functions_res)
