@@ -4,9 +4,7 @@ mod algebra {
     pub mod polynomial;
 }
 mod merkle_tree;
-mod protocal {
-    mod rolling_fri;
-}
+mod rolling_fri;
 
 fn main() {
     println!("Hello world");
