@@ -8,13 +8,14 @@ use crate::{
 mod prover;
 mod verifier;
 
+#[derive(Clone)]
 pub struct QueryResult<T: Field> {
-    proof_bytes: Vec<u8>,
-    proof_values: HashMap<usize, T>,
+    pub proof_bytes: Vec<u8>,
+    pub proof_values: HashMap<usize, T>,
 }
 
 impl<T: Field> QueryResult<T> {
-    fn verify_merkle_tree(
+    pub fn verify_merkle_tree(
         &self,
         leaf_indices: &Vec<usize>,
         merkle_verifier: &MerkleTreeVerifier,
@@ -89,7 +90,7 @@ mod tests {
         prover.borrow_mut().commit_functions();
         prover.borrow_mut().prove();
         let mut points = vec![];
-        for _i in 0..1 {
+        for _i in 0..10 {
             points.push(rand::thread_rng().gen_range(0..domain.size()));
         }
         let (folding_query, function_query) = prover.borrow().query(&points);

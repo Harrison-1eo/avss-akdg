@@ -4,6 +4,7 @@ mod algebra {
     pub mod polynomial;
 }
 mod merkle_tree;
+mod one2many;
 mod rolling_fri;
 
 fn main() {

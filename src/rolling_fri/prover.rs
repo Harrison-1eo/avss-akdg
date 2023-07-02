@@ -23,10 +23,7 @@ impl<T: Field> InterpolateValue<T> {
             let len = value.len();
             (0..len).map(|i| as_bytes_vec(&[value[i]])).collect()
         });
-        Self {
-            value: value,
-            merkle_tree: merkle_tree,
-        }
+        Self { value, merkle_tree }
     }
 
     fn query(&self, leaf_indices: &Vec<usize>, half: bool) -> QueryResult<T> {
@@ -123,11 +120,7 @@ impl<T: Field> RollingFriProver<T> {
                 .collect();
 
             verifier.borrow_mut().set_function_root(
-                if idx == 0 {
-                    fv.field_size() / 2
-                } else {
-                    fv.field_size()
-                },
+                fv.interpolates[0].merkle_tree.leave_num(),
                 commit,
                 fv.map,
             );
@@ -226,9 +219,7 @@ impl<T: Field> RollingFriProver<T> {
             }
 
             if i > 0 {
-                folding_res.push(
-                    self.foldings[i - 1].query(&leaf_indices, true),
-                );
+                folding_res.push(self.foldings[i - 1].query(&leaf_indices, true));
             }
         }
         (folding_res, functions_res)

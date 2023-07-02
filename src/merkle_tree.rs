@@ -30,6 +30,10 @@ impl MerkleTreeProver {
         Self { merkle_tree }
     }
 
+    pub fn leave_num(&self) -> usize {
+        self.merkle_tree.leaves_len()
+    }
+
     pub fn commit(&self) -> [u8; 32] {
         self.merkle_tree.root().unwrap()
     }

@@ -109,8 +109,43 @@ impl<T: Field> Coset<T> {
         }
     }
 
+    pub fn order(&self) -> usize {
+        self.fft_eval_domain.order
+    }
+
+    pub fn pow(&self, index: usize) -> Coset<T> {
+        let lowbit = (index as i64 & (-(index as i64))) as usize;
+        Coset {
+            elements: Rc::new(RefCell::new(vec![])),
+            fft_eval_domain: Radix2Domain::new(self.order() / lowbit),
+            shift: self.shift.pow(index as u64),
+        }
+    }
+
+    pub fn square(&self) -> Coset<T> {
+        Coset {
+            elements: Rc::new(RefCell::new(vec![])),
+            fft_eval_domain: Radix2Domain::new(self.order() / 2),
+            shift: self.shift * self.shift,
+        }
+    }
+
     pub fn generator(&self) -> T {
         self.fft_eval_domain.omega
+    }
+
+    pub fn element_at(&self, index: usize) -> T {
+        let mut elements = self.elements.borrow_mut();
+        if elements.len() == 0 {
+            let mut el = self.shift;
+            for _i in 0..self.fft_eval_domain.order() {
+                elements.push(el);
+                el *= self.fft_eval_domain.omega();
+            }
+            elements[index]
+        } else {
+            elements[index]
+        }
     }
 
     pub fn all_elements(&self) -> Vec<T> {
