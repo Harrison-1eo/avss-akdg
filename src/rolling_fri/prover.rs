@@ -112,7 +112,7 @@ impl<T: Field> RollingFriProver<T> {
 
     pub fn commit_functions(&mut self) {
         let verifier = self.verifier.clone().unwrap();
-        for (idx, fv) in self.functions.iter().enumerate() {
+        for (_idx, fv) in self.functions.iter().enumerate() {
             let commit = fv
                 .interpolates
                 .iter()
