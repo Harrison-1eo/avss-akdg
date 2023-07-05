@@ -68,8 +68,59 @@ impl<T: Field> VanishingPolynomial<T> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct MultilinearPolynomial<T: Field> {
+    coefficients: Vec<T>
+}
+
+impl<T: Field> MultilinearPolynomial<T> {
+    fn new(coefficients: Vec<T>) -> Self {
+        let len = coefficients.len();
+        assert_eq!(len & (len - 1), 0);
+        MultilinearPolynomial { coefficients }
+    }
+
+    fn folding(&self, parameter: T) -> Self {
+        let mut coefficients = vec![];
+        for i in (0..self.coefficients.len()).step_by(2) {
+            coefficients.push(self.coefficients[i] + parameter * self.coefficients[i + 1]);
+        }
+        MultilinearPolynomial { coefficients }
+    }
+    
+    pub fn random_polynomial(variable_num: usize) -> Self {
+        MultilinearPolynomial {
+            coefficients: (0..(1 << variable_num)).map(|_| Field::random_element()).collect(),
+        }
+    }
+
+    fn evaluate(&self, point: &Vec<T>) -> T {
+        let len = self.coefficients.len();
+        assert_eq!(1 << point.len(), self.coefficients.len());
+        let mut res = self.coefficients.clone();
+        for (index, coeff) in point.iter().enumerate() {
+            for i in (0..len).step_by(2 << index) {
+                let x = *coeff * res[i + (1 << index)];
+                res[i] += x;
+            }
+        }
+        res[0]
+    }
+    
+    fn evaluate_as_polynomial(&self, point: T) -> T {
+        let mut res = Field::from_int(0);
+        for i in self.coefficients.iter().rev() {
+            res *= point;
+            res += *i;
+        }
+        res
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use crate::algebra::field::mersenne61_ext::Mersenne61Ext;
+
     use super::super::field::fp64::Fp64;
     use super::*;
 
@@ -86,5 +137,26 @@ mod test {
         for i in coset.all_elements() {
             assert_eq!(Fp64::from_int(0), poly.evaluation_at(i));
         }
+    }
+
+    #[test]
+    fn multilinear() {
+        let poly = MultilinearPolynomial::random_polynomial(8);
+        let point = (0..8).map(|_| Mersenne61Ext::random_element()).collect();
+        let v = poly.evaluate(&point);
+        let mut folding_poly = poly.clone();
+        for parameter in point {
+            folding_poly = folding_poly.folding(parameter);
+        }
+        assert_eq!(folding_poly.coefficients.len(), 1);
+        assert_eq!(folding_poly.coefficients[0], v);
+        let z = Mersenne61Ext::random_element();
+        let beta = Mersenne61Ext::random_element();
+        let folding_poly = poly.folding(z);
+        let a = poly.evaluate_as_polynomial(beta);
+        let b = poly.evaluate_as_polynomial(-beta);
+        let c = folding_poly.evaluate_as_polynomial(beta * beta);
+        let v = a + b + z * (a - b) * beta.inverse();
+        assert_eq!(v * Mersenne61Ext::from_int(2).inverse(), c);
     }
 }
