@@ -57,40 +57,53 @@ impl<T: Field> VanishingPolynomial<T> {
         let degree = coset.size();
         VanishingPolynomial {
             degree,
-            shift: coset.shift().pow(degree as u64),
+            shift: coset.shift().pow(degree),
         }
     }
 
     // The n roots of the equation x^n - a^n = 0 are a*w_n^0, ..., a*w_n*{n-1}
     // Thus, f(x) = (x - a*w_n^0)...(x - a*w_n^{n-1}) = x^n - a^n
     fn evaluation_at(&self, x: T) -> T {
-        x.pow(self.degree as u64) - self.shift
+        x.pow(self.degree) - self.shift
     }
 }
 
 #[derive(Debug, Clone)]
-struct MultilinearPolynomial<T: Field> {
-    coefficients: Vec<T>
+pub struct MultilinearPolynomial<T: Field> {
+    coefficients: Vec<T>,
 }
 
 impl<T: Field> MultilinearPolynomial<T> {
+    pub fn coefficients(&self) -> &Vec<T> {
+        &self.coefficients
+    }
+
     fn new(coefficients: Vec<T>) -> Self {
         let len = coefficients.len();
         assert_eq!(len & (len - 1), 0);
         MultilinearPolynomial { coefficients }
     }
 
-    fn folding(&self, parameter: T) -> Self {
-        let mut coefficients = vec![];
-        for i in (0..self.coefficients.len()).step_by(2) {
-            coefficients.push(self.coefficients[i] + parameter * self.coefficients[i + 1]);
-        }
+    pub fn folding(&self, parameter: T) -> Self {
+        let coefficients = Self::folding_vector(&self.coefficients, parameter);
         MultilinearPolynomial { coefficients }
     }
-    
+
+    fn folding_vector(v: &Vec<T>, parameter: T) -> Vec<T> {
+        let len = v.len();
+        assert_eq!(len & (len - 1), 0);
+        let mut res = vec![];
+        for i in (0..v.len()).step_by(2) {
+            res.push(v[i] + parameter * v[i + 1]);
+        }
+        res
+    }
+
     pub fn random_polynomial(variable_num: usize) -> Self {
         MultilinearPolynomial {
-            coefficients: (0..(1 << variable_num)).map(|_| Field::random_element()).collect(),
+            coefficients: (0..(1 << variable_num))
+                .map(|_| Field::random_element())
+                .collect(),
         }
     }
 
@@ -106,14 +119,18 @@ impl<T: Field> MultilinearPolynomial<T> {
         }
         res[0]
     }
-    
-    fn evaluate_as_polynomial(&self, point: T) -> T {
+
+    pub fn evaluate_as_polynomial(&self, point: T) -> T {
         let mut res = Field::from_int(0);
         for i in self.coefficients.iter().rev() {
             res *= point;
             res += *i;
         }
         res
+    }
+
+    pub fn variable_num(&self) -> usize {
+        self.coefficients.len().ilog2() as usize
     }
 }
 

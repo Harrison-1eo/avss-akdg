@@ -143,9 +143,8 @@ impl<T: Field> RollingFriVerifier<T> {
                 for j in &leaf_indices {
                     let x = folding_values.get(j).unwrap().clone();
                     let nx = folding_values.get(&(j + domain_size / 2)).unwrap().clone();
-                    let v = x
-                        + nx
-                        + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(*j as u64);
+                    let v =
+                        x + nx + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(*j);
                     let v = v * T::from_int(2).inverse();
                     let function_value = self.function_maps[i + 1](
                         function_query_result
@@ -166,9 +165,8 @@ impl<T: Field> RollingFriVerifier<T> {
                 for j in &leaf_indices {
                     let x = folding_values.get(j).unwrap().clone();
                     let nx = folding_values.get(&(j + domain_size / 2)).unwrap().clone();
-                    let v = x
-                        + nx
-                        + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(*j as u64);
+                    let v =
+                        x + nx + self.challenges[i] * (x - nx) * shift_inv * generator_inv.pow(*j);
                     let v = v * T::from_int(2).inverse();
                     if v != self.final_value.unwrap() {
                         return false;

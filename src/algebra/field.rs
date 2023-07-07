@@ -38,7 +38,7 @@ pub trait Field:
         res
     }
 
-    fn pow(&self, mut n: u64) -> Self {
+    fn pow(&self, mut n: usize) -> Self {
         let mut ret = Self::from_int(1);
         let mut base = self.clone();
         while n != 0 {

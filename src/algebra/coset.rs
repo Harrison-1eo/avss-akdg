@@ -7,11 +7,8 @@ struct Radix2Domain<T: Field> {
 }
 
 impl<T: Field> Radix2Domain<T> {
-    pub fn new(order: usize) -> Self {
-        Radix2Domain {
-            order,
-            omega: T::get_generator(order),
-        }
+    pub fn new(order: usize, omega: T) -> Self {
+        Radix2Domain { order, omega }
     }
 
     pub fn order(&self) -> usize {
@@ -76,7 +73,7 @@ fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
     }
     let mut m = 1usize;
     for _i in 0..log_n {
-        let w_m = omega.pow((n / (m * 2)) as u64);
+        let w_m = omega.pow(n / (m * 2));
         for j in (0..n).step_by(2 * m) {
             let mut w = T::from_int(1);
             for k in 0..m {
@@ -102,9 +99,10 @@ pub struct Coset<T: Field> {
 impl<T: Field> Coset<T> {
     pub fn new(order: usize, shift: T) -> Self {
         assert!(!shift.is_zero());
+        let omega = T::get_generator(order);
         Coset {
             elements: Rc::new(RefCell::new(vec![])),
-            fft_eval_domain: Radix2Domain::new(order),
+            fft_eval_domain: Radix2Domain::new(order, omega),
             shift,
         }
     }
@@ -115,18 +113,11 @@ impl<T: Field> Coset<T> {
 
     pub fn pow(&self, index: usize) -> Coset<T> {
         let lowbit = (index as i64 & (-(index as i64))) as usize;
+        let omega = self.generator().pow(index);
         Coset {
             elements: Rc::new(RefCell::new(vec![])),
-            fft_eval_domain: Radix2Domain::new(self.order() / lowbit),
-            shift: self.shift.pow(index as u64),
-        }
-    }
-
-    pub fn square(&self) -> Coset<T> {
-        Coset {
-            elements: Rc::new(RefCell::new(vec![])),
-            fft_eval_domain: Radix2Domain::new(self.order() / 2),
-            shift: self.shift * self.shift,
+            fft_eval_domain: Radix2Domain::new(self.order() / lowbit, omega),
+            shift: self.shift.pow(index),
         }
     }
 
@@ -164,9 +155,9 @@ impl<T: Field> Coset<T> {
         self.fft_eval_domain.order()
     }
 
-    pub fn fft(&self, evals: &Vec<T>) -> Vec<T> {
-        assert!(self.size() >= evals.len());
-        let mut a = evals.clone();
+    pub fn fft(&self, coeff: &Vec<T>) -> Vec<T> {
+        assert!(self.size() >= coeff.len());
+        let mut a = coeff.clone();
         let n = self.size() as i64 - a.len() as i64;
         for _i in 0..n {
             a.push(T::from_int(0));
@@ -191,8 +182,11 @@ impl<T: Field> Coset<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::algebra::field::mersenne61_ext::Mersenne61Ext;
+
     use super::super::field::fp64::Fp64;
     use super::*;
+    use rand::Rng;
 
     #[test]
     fn fft_and_ifft() {
@@ -215,7 +209,7 @@ mod tests {
                 a_times_b[i + j] += a[i] * b[j];
             }
         }
-        let domain: Radix2Domain<Fp64> = Radix2Domain::new(32);
+        let domain: Radix2Domain<Fp64> = Radix2Domain::new(32, Fp64::get_generator(32));
         domain.fft(&mut a);
         domain.fft(&mut b);
         for i in 0..a.len() {
@@ -240,5 +234,28 @@ mod tests {
             assert_eq!(elements[i] * omega, elements[i + 1]);
         }
         assert_eq!(*elements.last().unwrap() * omega, elements[0]);
+    }
+
+    #[test]
+    fn pow() {
+        let shift = Mersenne61Ext::random_element();
+        let coset = Coset::new(32, shift);
+        let coset_square = coset.pow(2);
+        for (idx, i) in coset_square.all_elements().iter().enumerate() {
+            assert_eq!(*i, coset.all_elements()[idx].pow(2));
+            assert_eq!(*i, coset.all_elements()[idx + coset_square.size()].pow(2));
+        }
+        let coset_exp6 = coset.pow(12);
+        for (idx, i) in coset.all_elements().iter().enumerate() {
+            assert_eq!(
+                i.pow(12),
+                coset_exp6.all_elements()[idx % coset_exp6.size()]
+            );
+        }
+        let r = rand::thread_rng().gen();
+        let coset_rand = coset.pow(r);
+        for (idx, i) in coset.all_elements().iter().enumerate() {
+            assert_eq!(i.pow(r), coset_rand.all_elements()[idx % coset_rand.size()]);
+        }
     }
 }

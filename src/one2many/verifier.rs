@@ -9,7 +9,7 @@ use super::RandomOracle;
 
 pub struct One2ManyVerifier<T: Field, const N: usize> {
     interpolate_cosets: Vec<Coset<T>>,
-    committed_polynomial: Option<MerkleTreeVerifier>,
+    // committed_polynomial: Option<MerkleTreeVerifier>,
     function_root: Vec<MerkleTreeVerifier>,
     function_maps: Vec<Box<dyn Fn(T, T, T) -> T>>,
     folding_root: Vec<MerkleTreeVerifier>,
@@ -21,10 +21,9 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
     pub fn new(coset: &Coset<T>, oracle: &Rc<RefCell<RandomOracle<T>>>) -> Self {
         let mut cosets = vec![coset.clone()];
         for _ in 1..N {
-            cosets.push(cosets.last().as_ref().unwrap().square());
+            cosets.push(cosets.last().as_ref().unwrap().pow(2));
         }
         One2ManyVerifier {
-            committed_polynomial: None,
             interpolate_cosets: cosets,
             function_root: vec![],
             function_maps: vec![],
@@ -34,24 +33,22 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
         }
     }
 
-    pub fn commit_polynomial(&mut self, leave_number: usize, function_root: &[u8; 32]) {
-        self.committed_polynomial = Some(MerkleTreeVerifier {
-            merkle_root: function_root.clone(),
-            leave_number,
-        });
+    // pub fn commit_polynomial(&mut self, leave_number: usize, function_root: &[u8; 32]) {
+    //     self.committed_polynomial = Some(MerkleTreeVerifier {
+    //         merkle_root: function_root.clone(),
+    //         leave_number,
+    //     });
+    // }
+
+    pub fn set_map(&mut self, function_map: Box<dyn Fn(T, T, T) -> T>) {
+        self.function_maps.push(function_map);
     }
 
-    pub fn set_function(
-        &mut self,
-        leave_number: usize,
-        function_root: &[u8; 32],
-        function_map: Box<dyn Fn(T, T, T) -> T>,
-    ) {
+    pub fn set_function(&mut self, leave_number: usize, function_root: &[u8; 32]) {
         self.function_root.push(MerkleTreeVerifier {
             merkle_root: function_root.clone(),
             leave_number,
         });
-        self.function_maps.push(function_map);
     }
 
     pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; 32]) {
@@ -67,7 +64,6 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
 
     pub fn verify(
         &self,
-        committed_proofs: Vec<QueryResult<T>>,
         folding_proofs: Vec<QueryResult<T>>,
         function_proofs: Vec<QueryResult<T>>,
     ) -> bool {
@@ -84,13 +80,11 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
             leaf_indices.dedup();
 
             if i == 0 {
-                committed_proofs.iter().for_each(|x| {
-                    x.verify_merkle_tree(
-                        &leaf_indices,
-                        &self.committed_polynomial.as_ref().unwrap(),
-                        Some(domain_size / 2),
-                    );
-                })
+                function_proofs[i].verify_merkle_tree(
+                    &leaf_indices,
+                    &self.function_root[0],
+                    Some(domain_size / 2),
+                );
             } else {
                 folding_proofs[i - 1].verify_merkle_tree(
                     &leaf_indices,
@@ -99,39 +93,42 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
                 );
             }
 
+            let challenge = self.oracle.borrow().get_challenge(i);
             let get_folding_value = |index: &usize| {
                 if i == 0 {
-                    committed_proofs[0].proof_values[index]
+                    self.function_maps[i](
+                        function_proofs[i].proof_values[index],
+                        self.interpolate_cosets[i].all_elements()[*index],
+                        challenge,
+                    )
                 } else {
                     folding_proofs[i - 1].proof_values[index]
                 }
             };
 
-            let function_value = if i < N - 1 {
-                let function_query_result = &function_proofs[i];
+            let function_values = if i < N - 1 {
+                let function_query_result = &function_proofs[i + 1];
                 function_query_result.verify_merkle_tree(
                     &leaf_indices,
-                    &self.function_root[i],
+                    &self.function_root[i + 1],
                     None,
                 );
                 Some(&function_query_result.proof_values)
             } else {
                 None
             };
-
-            let challenge = self.oracle.borrow().get_challenge(i);
             for j in &leaf_indices {
                 let x = get_folding_value(j);
                 let nx = get_folding_value(&(j + domain_size / 2));
-                let v = x + nx + challenge * (x - nx) * shift_inv * generator_inv.pow(*j as u64);
+                let v = x + nx + challenge * (x - nx) * shift_inv * generator_inv.pow(*j);
                 let v = v * T::from_int(2).inverse();
                 if i == N - 1 {
                     if v != self.final_value.unwrap() {
                         return false;
                     }
                 } else {
-                    let function_value = self.function_maps[i](
-                        function_value.as_ref().unwrap()[j],
+                    let function_value = self.function_maps[i + 1](
+                        function_values.as_ref().unwrap()[j],
                         self.interpolate_cosets[i + 1].all_elements()[*j],
                         challenge,
                     );

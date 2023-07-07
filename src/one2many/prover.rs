@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use super::verifier::One2ManyVerifier;
 use super::RandomOracle;
-use crate::algebra::polynomial::Polynomial;
+
 use crate::rolling_fri::QueryResult;
 use crate::{
     algebra::{
@@ -98,7 +98,7 @@ impl<T: Field> FunctionValue<T> {
 }
 
 struct CosetFunction<T: Field> {
-    functions: Vec<FunctionValue<T>>,
+    pub functions: Vec<FunctionValue<T>>,
 }
 
 impl<T: Field> CosetFunction<T> {
@@ -154,7 +154,6 @@ impl<T: Field> CosetInterpolate<T> {
 
 pub struct One2ManyProver<T: Field, const N: usize> {
     interpolate_cosets: Vec<Coset<T>>,
-    commited_function: InterpolateValue<T>,
     functions: Vec<CosetFunction<T>>,
     foldings: Vec<CosetInterpolate<T>>,
     oracle: Rc<RefCell<RandomOracle<T>>>,
@@ -164,24 +163,21 @@ pub struct One2ManyProver<T: Field, const N: usize> {
 impl<T: Field, const N: usize> One2ManyProver<T, N> {
     pub fn new(
         interpolate_coset: &Coset<T>,
-        commited_polynomial: &Polynomial<T>,
         functions: Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
     ) -> One2ManyProver<T, N> {
-        let functions = functions
+        let functions: Vec<CosetFunction<T>> = functions
             .into_iter()
-            .map(|x| CosetFunction::new(x, false))
+            .enumerate()
+            .map(|(i, x)| CosetFunction::new(x, i == 0))
             .collect();
         let mut cosets = vec![interpolate_coset.clone()];
         for _ in 1..N {
-            cosets.push(cosets.last().as_ref().unwrap().square());
+            cosets.push(cosets.last().as_ref().unwrap().pow(2));
         }
+
         One2ManyProver {
             interpolate_cosets: cosets,
-            commited_function: InterpolateValue::new(
-                interpolate_coset.fft(commited_polynomial.coefficients()),
-                true,
-            ),
             functions,
             foldings: vec![],
             oracle: oracle.clone(),
@@ -189,32 +185,28 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
         }
     }
 
-    pub fn commit_functions(&self, verifiers: &mut Vec<One2ManyVerifier<T, N>>) {
-        let polynomial_commitment = self.commited_function.commit();
-        for v in verifiers.into_iter() {
-            v.commit_polynomial(self.commited_function.leave_num(), &polynomial_commitment);
-        }
-        for i in 0..(N - 1) {
+    pub fn commit_functions(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T, N>>>>) {
+        for i in 0..N {
             for (idx, j) in verifiers.into_iter().enumerate() {
                 let function = self.functions[i].get_function(idx);
-                j.set_function(
-                    function.leave_number(),
-                    &function.commit(),
-                    Box::new(|v, x, c| v + c * x),
-                );
+                j.borrow_mut()
+                    .set_function(function.leave_number(), &function.commit());
             }
         }
     }
 
-    pub fn commit_foldings(&self, verifiers: &mut Vec<One2ManyVerifier<T, N>>) {
+    pub fn commit_foldings(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T, N>>>>) {
         for i in 0..(N - 1) {
             for (idx, j) in verifiers.into_iter().enumerate() {
                 let interpolation = self.foldings[i].get_interpolation(idx);
-                j.receive_folding_root(interpolation.leave_num(), interpolation.commit());
+                j.borrow_mut()
+                    .receive_folding_root(interpolation.leave_num(), interpolation.commit());
             }
         }
         for i in 0..verifiers.len() {
-            verifiers[i].set_final_value(self.final_value[i % self.final_value.len()]);
+            verifiers[i]
+                .borrow_mut()
+                .set_final_value(self.final_value[i % self.final_value.len()]);
         }
     }
 
@@ -226,13 +218,17 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
     ) -> Vec<T> {
         let mut res = vec![];
         let len = if round == 0 {
-            self.commited_function.field_size()
+            self.functions[round].field_size()
         } else {
             self.foldings[round - 1].field_size()
         };
         let get_folding_value = |i: usize| {
             if round == 0 {
-                self.commited_function.value[i]
+                self.functions[round].get_function(0).get_value(
+                    i,
+                    &self.interpolate_cosets[round],
+                    challenge,
+                )
             } else {
                 self.foldings[round - 1]
                     .get_interpolation(rolling_function_index)
@@ -250,11 +246,8 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
                 res.push(
                     new_v
                         + challenge.pow(2)
-                            * self.functions[round].functions[rolling_function_index].get_value(
-                                i,
-                                &self.interpolate_cosets[round + 1],
-                                challenge,
-                            ),
+                            * self.functions[round + 1].functions[rolling_function_index]
+                                .get_value(i, &self.interpolate_cosets[round + 1], challenge),
                 );
             } else {
                 res.push(new_v);
@@ -269,7 +262,7 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
             let challenge = self.oracle.borrow_mut().generate_challenge();
             if i < N - 1 {
                 let mut interpolates = vec![];
-                for j in 0..self.functions[i].len() {
+                for j in 0..self.functions[i + 1].len() {
                     let next_evalutation = self.evaluation_next_domain(i, j, challenge);
                     let interpolate_value = InterpolateValue::new(next_evalutation, true);
                     interpolates.push(interpolate_value);
@@ -277,7 +270,7 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
                 self.foldings
                     .push(CosetInterpolate::from_interpolates(interpolates));
             } else {
-                for j in 0..self.functions[i - 1].len() {
+                for j in 0..self.functions[i].len() {
                     let next_evalutation = self.evaluation_next_domain(i, j, challenge);
                     self.final_value.push(next_evalutation[0]);
                 }
@@ -285,36 +278,25 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
         }
     }
 
-    pub fn query(
-        &self,
-    ) -> (
-        Vec<QueryResult<T>>,
-        Vec<Vec<QueryResult<T>>>,
-        Vec<Vec<QueryResult<T>>>,
-    ) {
+    pub fn query(&self) -> (Vec<Vec<QueryResult<T>>>, Vec<Vec<QueryResult<T>>>) {
         let mut folding_res = vec![];
         let mut functions_res = vec![];
-        let mut committed_res = vec![];
         let mut leaf_indices = self.oracle.borrow().usize_elements.clone().unwrap();
 
         for i in 0..N {
-            let len = if i == 0 {
-                self.commited_function.field_size()
-            } else {
-                self.functions[i - 1].field_size()
-            };
+            let len = self.functions[i].field_size();
             leaf_indices = leaf_indices.iter_mut().map(|v| *v % (len >> 1)).collect();
             leaf_indices.sort();
             leaf_indices.dedup();
 
             let f = |x: &FunctionValue<T>, y| x.interpolate.query(&leaf_indices, y);
             if i == 0 {
-                let query_result = self.commited_function.query(&leaf_indices, true);
-                committed_res.push(query_result);
+                let query_result = f(self.functions[0].get_function(0), true);
+                functions_res.push(vec![query_result]);
             }
 
             if i < N - 1 {
-                let query_result = self.functions[i]
+                let query_result = self.functions[i + 1]
                     .functions
                     .iter()
                     .map(|x| f(x, false))
@@ -332,6 +314,6 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
                 );
             }
         }
-        (committed_res, folding_res, functions_res)
+        (folding_res, functions_res)
     }
 }

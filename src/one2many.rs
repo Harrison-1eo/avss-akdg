@@ -2,23 +2,35 @@ use rand::Rng;
 
 use crate::algebra::field::Field;
 
-mod prover;
-mod verifier;
+pub mod prover;
+pub mod verifier;
 
 pub struct RandomOracle<T: Field> {
+    beta: Option<T>,
     folding_challenges: Vec<T>,
     usize_elements: Option<Vec<usize>>,
 }
 
 impl<T: Field> RandomOracle<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         RandomOracle {
+            beta: None,
             folding_challenges: vec![],
             usize_elements: None,
         }
     }
 
-    fn generate_queries(&mut self, len: usize) {
+    pub fn generate_beta(&mut self) -> T {
+        let beta = T::random_element();
+        self.beta = Some(beta);
+        beta
+    }
+
+    pub fn beta(&self) -> T {
+        self.beta.unwrap()
+    }
+
+    pub fn generate_queries(&mut self, len: usize) {
         self.usize_elements = Some(
             (0..len)
                 .into_iter()
@@ -41,7 +53,9 @@ impl<T: Field> RandomOracle<T> {
 #[cfg(test)]
 mod tests {
     use crate::algebra::{
-        coset::Coset, field::mersenne61_ext::Mersenne61Ext, polynomial::Polynomial,
+        coset::Coset,
+        field::mersenne61_ext::Mersenne61Ext,
+        polynomial::{Polynomial},
     };
     use std::{cell::RefCell, rc::Rc};
 
@@ -52,9 +66,9 @@ mod tests {
         let shift = Mersenne61Ext::random_element();
         let interpolate_coset = Coset::new(1 << 11, shift);
         let mut functions_value = vec![];
-        let size_each_round = vec![8, 16, 32, 64, 512, 1024, 2048];
-        let mut domain_size = interpolate_coset.size() / 2;
-        let mut shift = interpolate_coset.shift().pow(2);
+        let size_each_round = vec![1, 8, 16, 32, 64, 512, 1024, 2048];
+        let mut domain_size = interpolate_coset.size();
+        let mut shift = interpolate_coset.shift();
         for size in size_each_round {
             let current_domain = Coset::new(domain_size, shift);
             let polies = (0..size)
@@ -79,28 +93,35 @@ mod tests {
             shift *= shift;
         }
         let oracle = Rc::new(RefCell::new(RandomOracle::new()));
-        let mut verifiers: Vec<One2ManyVerifier<Mersenne61Ext, 8>> = (0..4096)
+        let verifiers = (0..4096)
             .into_iter()
-            .map(|_| One2ManyVerifier::new(&interpolate_coset, &oracle))
-            .collect();
-        let commited_polynomial = Polynomial::random_polynomial(1 << 8);
-        let mut prover: One2ManyProver<Mersenne61Ext, 8> = One2ManyProver::new(
-            &interpolate_coset,
-            &commited_polynomial,
-            functions_value,
-            &oracle,
-        );
-        prover.commit_functions(&mut verifiers);
+            .map(|_| {
+                Rc::new(RefCell::new(One2ManyVerifier::new(
+                    &interpolate_coset,
+                    &oracle,
+                )))
+            })
+            .collect::<Vec<_>>();
+        verifiers.iter().for_each(|x| {
+            for _ in 0..8 {
+                x.borrow_mut().set_map(Box::new(|v, x, c| v + c * x));
+            }
+        });
+        let mut prover: One2ManyProver<Mersenne61Ext, 8> =
+            One2ManyProver::new(&interpolate_coset, functions_value, &oracle);
+        prover.commit_functions(&verifiers);
         prover.prove();
-        prover.commit_foldings(&mut verifiers);
+        prover.commit_foldings(&verifiers);
         oracle.borrow_mut().generate_queries(10);
-        let (committed, folding, function) = prover.query();
+        let (folding, function) = prover.query();
         let mut folding715 = vec![];
         let mut function715 = vec![];
-        for i in 0..7 {
-            folding715.push(folding[i][715 % folding[i].len()].clone());
+        for i in 0..8 {
+            if i < 7 {
+                folding715.push(folding[i][715 % folding[i].len()].clone());
+            }
             function715.push(function[i][715 % function[i].len()].clone());
         }
-        assert!(verifiers[715].verify(committed, folding715, function715));
+        assert!(verifiers[715].borrow().verify(folding715, function715));
     }
 }
