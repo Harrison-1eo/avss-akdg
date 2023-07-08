@@ -63,18 +63,18 @@ fn bitreverse(mut x: usize, len: usize) -> usize {
 
 fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
     let n = a.len();
-    let log_n = (n as f64).log2() as usize;
-    assert_eq!(1 << log_n, n);
+    let log_n = n.ilog2() as usize;
     for i in 0..n {
         let rank = bitreverse(i, log_n);
         if i < rank {
             (a[i], a[rank]) = (a[rank], a[i]);
         }
     }
-    let mut m = 1usize;
+    let mut log_m = 0usize;
     for _i in 0..log_n {
-        let w_m = omega.pow(n / (m * 2));
-        for j in (0..n).step_by(2 * m) {
+        let w_m = omega.pow(n >> (log_m + 1));
+        let m = 1 << log_m;
+        for j in (0..n).step_by(m * 2) {
             let mut w = T::from_int(1);
             for k in 0..m {
                 let t = w * a[j + k + m];
@@ -83,7 +83,7 @@ fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
                 w *= w_m;
             }
         }
-        m *= 2;
+        log_m += 1;
     }
 }
 
@@ -158,7 +158,7 @@ impl<T: Field> Coset<T> {
     pub fn fft(&self, coeff: &Vec<T>) -> Vec<T> {
         assert!(self.size() >= coeff.len());
         let mut a = coeff.clone();
-        let n = self.size() as i64 - a.len() as i64;
+        let n = self.size() - a.len();
         for _i in 0..n {
             a.push(T::from_int(0));
         }

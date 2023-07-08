@@ -1,65 +1,15 @@
-use rand::Rng;
-
-use crate::algebra::field::Field;
-
 pub mod prover;
 pub mod verifier;
-
-pub struct RandomOracle<T: Field> {
-    beta: Option<T>,
-    folding_challenges: Vec<T>,
-    usize_elements: Option<Vec<usize>>,
-}
-
-impl<T: Field> RandomOracle<T> {
-    pub fn new() -> Self {
-        RandomOracle {
-            beta: None,
-            folding_challenges: vec![],
-            usize_elements: None,
-        }
-    }
-
-    pub fn generate_beta(&mut self) -> T {
-        let beta = T::random_element();
-        self.beta = Some(beta);
-        beta
-    }
-
-    pub fn beta(&self) -> T {
-        self.beta.unwrap()
-    }
-
-    pub fn generate_queries(&mut self, len: usize) {
-        self.usize_elements = Some(
-            (0..len)
-                .into_iter()
-                .map(|_| rand::thread_rng().gen())
-                .collect(),
-        )
-    }
-
-    fn get_challenge(&self, index: usize) -> T {
-        self.folding_challenges[index]
-    }
-
-    fn generate_challenge(&mut self) -> T {
-        let challenge = T::random_element();
-        self.folding_challenges.push(challenge);
-        challenge
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use crate::algebra::{
-        coset::Coset,
-        field::mersenne61_ext::Mersenne61Ext,
-        polynomial::{Polynomial},
+        coset::Coset, field::mersenne61_ext::Mersenne61Ext, field::Field, polynomial::Polynomial,
     };
+    use crate::random_oracle::RandomOracle;
     use std::{cell::RefCell, rc::Rc};
 
-    use super::{prover::One2ManyProver, verifier::One2ManyVerifier, *};
+    use super::{prover::One2ManyProver, verifier::One2ManyVerifier};
 
     #[test]
     fn test_one_to_many_rolling_fri() {

@@ -1,15 +1,14 @@
-use crate::rolling_fri::QueryResult;
+use crate::util::QueryResult;
 use crate::{
     algebra::{coset::Coset, field::Field},
     merkle_tree::MerkleTreeVerifier,
 };
 use std::{cell::RefCell, rc::Rc};
 
-use super::RandomOracle;
+use crate::random_oracle::RandomOracle;
 
 pub struct One2ManyVerifier<T: Field, const N: usize> {
     interpolate_cosets: Vec<Coset<T>>,
-    // committed_polynomial: Option<MerkleTreeVerifier>,
     function_root: Vec<MerkleTreeVerifier>,
     function_maps: Vec<Box<dyn Fn(T, T, T) -> T>>,
     folding_root: Vec<MerkleTreeVerifier>,
@@ -18,6 +17,23 @@ pub struct One2ManyVerifier<T: Field, const N: usize> {
 }
 
 impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
+    pub fn new_with_default_map(coset: &Coset<T>, oracle: &Rc<RefCell<RandomOracle<T>>>) -> Self {
+        let mut cosets = vec![coset.clone()];
+        for _ in 1..N {
+            cosets.push(cosets.last().as_ref().unwrap().pow(2));
+        }
+        One2ManyVerifier {
+            interpolate_cosets: cosets,
+            function_root: vec![],
+            function_maps: (0..N)
+                .map(|_| Box::new(move |v: T, _: T, _: T| v) as Box<dyn Fn(T, T, T) -> T>)
+                .collect(),
+            folding_root: vec![],
+            oracle: oracle.clone(),
+            final_value: None,
+        }
+    }
+
     pub fn new(coset: &Coset<T>, oracle: &Rc<RefCell<RandomOracle<T>>>) -> Self {
         let mut cosets = vec![coset.clone()];
         for _ in 1..N {
@@ -32,13 +48,6 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
             final_value: None,
         }
     }
-
-    // pub fn commit_polynomial(&mut self, leave_number: usize, function_root: &[u8; 32]) {
-    //     self.committed_polynomial = Some(MerkleTreeVerifier {
-    //         merkle_root: function_root.clone(),
-    //         leave_number,
-    //     });
-    // }
 
     pub fn set_map(&mut self, function_map: Box<dyn Fn(T, T, T) -> T>) {
         self.function_maps.push(function_map);
@@ -62,12 +71,18 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
         self.final_value = Some(value);
     }
 
-    pub fn verify(
+    fn verify_both_condition(
         &self,
         folding_proofs: Vec<QueryResult<T>>,
         function_proofs: Vec<QueryResult<T>>,
+        extra_folding_param: Option<&Vec<T>>,
+        extra_final_value: Option<T>,
     ) -> bool {
-        let mut leaf_indices = self.oracle.borrow().usize_elements.clone().unwrap();
+        let has_extra = match extra_final_value {
+            Some(_) => true,
+            None => false,
+        };
+        let mut leaf_indices = self.oracle.borrow().query_list();
         let mut shift_inv = self.interpolate_cosets[0].shift().inverse();
         let mut generator_inv = self.interpolate_cosets[0].generator().inverse();
         let mut domain_size = self.interpolate_cosets[0].size();
@@ -80,17 +95,9 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
             leaf_indices.dedup();
 
             if i == 0 {
-                function_proofs[i].verify_merkle_tree(
-                    &leaf_indices,
-                    &self.function_root[0],
-                    Some(domain_size / 2),
-                );
+                function_proofs[i].verify_merkle_tree(&leaf_indices, &self.function_root[0]);
             } else {
-                folding_proofs[i - 1].verify_merkle_tree(
-                    &leaf_indices,
-                    &self.folding_root[i - 1],
-                    Some(domain_size / 2),
-                );
+                folding_proofs[i - 1].verify_merkle_tree(&leaf_indices, &self.folding_root[i - 1]);
             }
 
             let challenge = self.oracle.borrow().get_challenge(i);
@@ -106,13 +113,9 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
                 }
             };
 
-            let function_values = if i < N - 1 {
-                let function_query_result = &function_proofs[i + 1];
-                function_query_result.verify_merkle_tree(
-                    &leaf_indices,
-                    &self.function_root[i + 1],
-                    None,
-                );
+            let function_values = if i != 0 {
+                let function_query_result = &function_proofs[i];
+                function_query_result.verify_merkle_tree(&leaf_indices, &self.function_root[i]);
                 Some(&function_query_result.proof_values)
             } else {
                 None
@@ -121,20 +124,44 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
                 let x = get_folding_value(j);
                 let nx = get_folding_value(&(j + domain_size / 2));
                 let v = x + nx + challenge * (x - nx) * shift_inv * generator_inv.pow(*j);
-                let v = v * T::from_int(2).inverse();
                 if i == N - 1 {
                     if v != self.final_value.unwrap() {
                         return false;
                     }
-                } else {
-                    let function_value = self.function_maps[i + 1](
+                } else if i != 0 {
+                    let x = self.function_maps[i](
                         function_values.as_ref().unwrap()[j],
-                        self.interpolate_cosets[i + 1].all_elements()[*j],
+                        self.interpolate_cosets[i].all_elements()[*j],
                         challenge,
                     );
-                    let v = v + challenge.pow(2) * function_value;
-                    if i < N - 1 && v != folding_proofs[i].proof_values[j] {
+                    let nx = self.function_maps[i](
+                        function_values.as_ref().unwrap()[&(j + domain_size / 2)],
+                        self.interpolate_cosets[i].all_elements()[*j + domain_size / 2],
+                        challenge,
+                    );
+                    let v = (v * challenge + (x + nx)) * challenge
+                        + (x - nx) * shift_inv * generator_inv.pow(*j);
+                    if v != folding_proofs[i].proof_values[j] {
                         return false;
+                    }
+                } else {
+                    if v != folding_proofs[i].proof_values[j] {
+                        return false;
+                    }
+                }
+                if has_extra {
+                    let x = function_proofs[i].proof_values[j];
+                    let nx = function_proofs[i].proof_values[&(j + domain_size / 2)];
+                    let v = x
+                        + nx
+                        + extra_folding_param.unwrap()[i]
+                            * (x - nx)
+                            * shift_inv
+                            * generator_inv.pow(*j);
+                    if i < N - 1 {
+                        assert_eq!(v, function_proofs[i + 1].proof_values[j] * T::from_int(2));
+                    } else {
+                        assert_eq!(v, extra_final_value.unwrap() * T::from_int(2));
                     }
                 }
             }
@@ -144,5 +171,28 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
             domain_size >>= 1;
         }
         true
+    }
+
+    pub fn verify_with_extra_folding(
+        &self,
+        folding_proofs: Vec<QueryResult<T>>,
+        function_proofs: Vec<QueryResult<T>>,
+        extra_folding_param: &Vec<T>,
+        extra_final_value: T,
+    ) -> bool {
+        self.verify_both_condition(
+            folding_proofs,
+            function_proofs,
+            Some(extra_folding_param),
+            Some(extra_final_value),
+        )
+    }
+
+    pub fn verify(
+        &self,
+        folding_proofs: Vec<QueryResult<T>>,
+        function_proofs: Vec<QueryResult<T>>,
+    ) -> bool {
+        self.verify_both_condition(folding_proofs, function_proofs, None, None)
     }
 }

@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::party::{AvssParty, Tuple};
+use super::party::AvssParty;
 use crate::algebra::coset::Coset;
-use crate::one2many::RandomOracle;
-use crate::rolling_fri::QueryResult;
+use crate::random_oracle::RandomOracle;
+use crate::util::QueryResult;
 use crate::{
     algebra::{field::Field, polynomial::MultilinearPolynomial},
     one2many::prover::One2ManyProver,
@@ -12,7 +12,7 @@ use crate::{
 
 pub struct Dealer<T: Field, const N: usize> {
     prover: One2ManyProver<T, N>,
-    tuples: Vec<Vec<Tuple<T>>>,
+    evaluations: Vec<T>,
 }
 
 impl<T: Field + 'static, const N: usize> Dealer<T, N> {
@@ -31,31 +31,9 @@ impl<T: Field + 'static, const N: usize> Dealer<T, N> {
         res
     }
 
-    fn calculate_tuples(
-        functions: &Vec<Vec<MultilinearPolynomial<T>>>,
-        beta: T,
-    ) -> Vec<Vec<Tuple<T>>> {
-        let mut tuples = vec![];
-        for i in 0..(functions.len() - 1) {
-            let mut round_tuple = vec![];
-            for j in 0..functions[i + 1].len() {
-                let k = j % functions[i].len();
-                round_tuple.push(Tuple {
-                    a: functions[i][k].evaluate_as_polynomial(beta),
-                    b: functions[i][k].evaluate_as_polynomial(-beta),
-                    c: functions[i + 1][j].evaluate_as_polynomial(beta * beta),
-                });
-            }
-            tuples.push(round_tuple);
-        }
-        tuples
-    }
-
     pub fn calculate_functions(
         functions: &Vec<Vec<MultilinearPolynomial<T>>>,
         coset: &Coset<T>,
-        tuples: &Vec<Vec<Tuple<T>>>,
-        beta: T,
     ) -> Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>> {
         let mut coset = coset.clone();
         let mut res = vec![];
@@ -63,25 +41,15 @@ impl<T: Field + 'static, const N: usize> Dealer<T, N> {
             let mut function_round = vec![];
             for j in 0..functions[i].len() {
                 let coeff = functions[i][j].coefficients();
-                let a = tuples[i][j].a;
-                let b = tuples[i][j].b;
                 if i == 0 {
                     function_round.push((
                         coset.fft(coeff),
-                        Box::new(move |v: T, x: T, _c: T| {
-                            (v - b) * (x + beta).inverse() + v + (v - a) * (x - beta).inverse()
-                        }) as Box<dyn Fn(T, T, T) -> T>,
+                        Box::new(move |v: T, _x: T, _c: T| v) as Box<dyn Fn(T, T, T) -> T>,
                     ));
                 } else {
-                    let c = tuples[i - 1][j].c;
                     function_round.push((
                         coset.fft(coeff),
-                        Box::new(move |v: T, x: T, _challenge: T| {
-                            (v - c) * (x - beta * beta).inverse()
-                                + (v - b) * (x + beta).inverse()
-                                + v
-                                + (v - a) * (x - beta).inverse()
-                        }) as Box<dyn Fn(T, T, T) -> T>,
+                        Box::new(move |v: T, _x: T, _c: T| v) as Box<dyn Fn(T, T, T) -> T>,
                     ));
                 }
             }
@@ -92,7 +60,7 @@ impl<T: Field + 'static, const N: usize> Dealer<T, N> {
     }
 
     pub fn new(
-        polynomial: MultilinearPolynomial<T>,
+        polynomial: &MultilinearPolynomial<T>,
         interpolate_coset: &Coset<T>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
         folding_parameter: &Vec<Vec<T>>,
@@ -100,15 +68,21 @@ impl<T: Field + 'static, const N: usize> Dealer<T, N> {
         assert_eq!(polynomial.variable_num(), N);
         let functions = Self::batch_folding(&polynomial, folding_parameter);
         assert_eq!(functions.len(), polynomial.variable_num() + 1);
-        let beta = oracle.borrow_mut().generate_beta();
+        // let beta = oracle.borrow_mut().generate_beta();
 
-        let tuples = Self::calculate_tuples(&functions, beta);
-        assert_eq!(tuples.len(), polynomial.variable_num());
-        let _last = tuples.last().unwrap();
-
-        let functions = Self::calculate_functions(&functions, &interpolate_coset, &tuples, beta);
+        // let tuples = Self::calculate_tuples(&functions, beta);
+        // assert_eq!(tuples.len(), polynomial.variable_num());
+        // let _last = tuples.last().unwrap();
+        let evaluations = functions
+            .last()
+            .unwrap()
+            .iter()
+            .map(|x| x.coefficients()[0])
+            .collect();
+        let functions = Self::calculate_functions(&functions, &interpolate_coset);
         Dealer {
-            tuples,
+            // tuples,
+            evaluations,
             prover: One2ManyProver::new(interpolate_coset, functions, oracle),
         }
     }
@@ -123,13 +97,18 @@ impl<T: Field + 'static, const N: usize> Dealer<T, N> {
         self.prover.commit_foldings(&verifiers);
     }
 
-    pub fn send_tuples(&self, avss_party: &mut Vec<AvssParty<T, N>>) {
-        for i in &self.tuples {
-            for (number, party) in avss_party.iter_mut().enumerate() {
-                party.add_tuple(&i[number % i.len()]);
-            }
+    pub fn send_evaluations(&self, avss_party: &mut Vec<AvssParty<T, N>>) {
+        for i in 0..avss_party.len() {
+            avss_party[i].set_share(self.evaluations[i]);
         }
     }
+    // pub fn send_tuples(&self, avss_party: &mut Vec<AvssParty<T, N>>) {
+    //     for i in &self.tuples {
+    //         for (number, party) in avss_party.iter_mut().enumerate() {
+    //             party.add_tuple(&i[number % i.len()]);
+    //         }
+    //     }
+    // }
 
     pub fn prove(&mut self) {
         self.prover.prove();

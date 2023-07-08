@@ -107,7 +107,7 @@ impl<T: Field> MultilinearPolynomial<T> {
         }
     }
 
-    fn evaluate(&self, point: &Vec<T>) -> T {
+    pub fn evaluate(&self, point: &Vec<T>) -> T {
         let len = self.coefficients.len();
         assert_eq!(1 << point.len(), self.coefficients.len());
         let mut res = self.coefficients.clone();
