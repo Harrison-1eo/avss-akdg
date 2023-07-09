@@ -6,13 +6,14 @@ use crate::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-pub struct AvssParty<T: Field, const N: usize> {
-    pub verifier: Rc<RefCell<One2ManyVerifier<T, N>>>,
+#[derive(Clone)]
+pub struct AvssParty<T: Field> {
+    pub verifier: Rc<RefCell<One2ManyVerifier<T>>>,
     open_point: Vec<T>,
     share: Option<T>,
 }
 
-impl<T: Field + 'static, const N: usize> AvssParty<T, N> {
+impl<T: Field + 'static> AvssParty<T> {
     pub fn share(&self) -> T {
         self.share.unwrap()
     }
@@ -29,9 +30,10 @@ impl<T: Field + 'static, const N: usize> AvssParty<T, N> {
         interpolate_coset: &Coset<T>,
         open_point: Vec<T>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
-    ) -> AvssParty<T, N> {
+    ) -> AvssParty<T> {
         AvssParty {
             verifier: Rc::new(RefCell::new(One2ManyVerifier::new_with_default_map(
+                open_point.len(),
                 interpolate_coset,
                 oracle,
             ))),

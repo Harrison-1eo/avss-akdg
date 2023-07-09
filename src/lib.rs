@@ -56,7 +56,7 @@ mod tests {
                     .collect(),
             );
         }
-        let mut parties: Vec<AvssParty<Mersenne61Ext, 8>> = vec![];
+        let mut parties = vec![];
         assert_eq!(folding_parameter.last().unwrap().len(), 1024);
         for i in 0..1024 {
             let mut open_point = vec![];
@@ -75,12 +75,7 @@ mod tests {
             assert_eq!(y.pow(4), open_point[4]);
             parties.push(AvssParty::new(&interpolate_coset, open_point, &oracle));
         }
-        let mut dealer = Dealer::<Mersenne61Ext, 8>::new(
-            &polynomial,
-            &interpolate_coset,
-            &oracle,
-            &folding_parameter,
-        );
+        let mut dealer = Dealer::new(&polynomial, &interpolate_coset, &oracle, &folding_parameter);
         dealer.send_evaluations(&mut parties);
         dealer.commit_functions(&parties);
         dealer.prove();

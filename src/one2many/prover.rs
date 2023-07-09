@@ -41,7 +41,6 @@ impl<T: Field> InterpolateValue<T> {
     }
 
     fn query(&self, leaf_indices: &Vec<usize>) -> QueryResult<T> {
-        // if half {
         let len = self.merkle_tree.leave_num();
         let proof_values = leaf_indices
             .iter()
@@ -52,14 +51,6 @@ impl<T: Field> InterpolateValue<T> {
             proof_bytes,
             proof_values,
         }
-        // } else {
-        //     let proof_values = leaf_indices.iter().map(|j| (*j, self.value[*j])).collect();
-        //     let proof_bytes = self.merkle_tree.open(&leaf_indices);
-        //     QueryResult {
-        //         proof_bytes,
-        //         proof_values,
-        //     }
-        // }
     }
 }
 
@@ -149,7 +140,8 @@ impl<T: Field> CosetInterpolate<T> {
     }
 }
 
-pub struct One2ManyProver<T: Field, const N: usize> {
+pub struct One2ManyProver<T: Field> {
+    total_round: usize,
     interpolate_cosets: Vec<Coset<T>>,
     functions: Vec<CosetFunction<T>>,
     foldings: Vec<CosetInterpolate<T>>,
@@ -157,23 +149,25 @@ pub struct One2ManyProver<T: Field, const N: usize> {
     final_value: Vec<T>,
 }
 
-impl<T: Field, const N: usize> One2ManyProver<T, N> {
+impl<T: Field> One2ManyProver<T> {
     pub fn new(
+        total_round: usize,
         interpolate_coset: &Coset<T>,
         functions: Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
-    ) -> One2ManyProver<T, N> {
+    ) -> One2ManyProver<T> {
+        assert_eq!(total_round, functions.len());
         let functions: Vec<CosetFunction<T>> = functions
             .into_iter()
-            // .enumerate()
             .map(|x| CosetFunction::new(x))
             .collect();
         let mut cosets = vec![interpolate_coset.clone()];
-        for _ in 1..N {
+        for _ in 1..total_round {
             cosets.push(cosets.last().as_ref().unwrap().pow(2));
         }
 
         One2ManyProver {
+            total_round,
             interpolate_cosets: cosets,
             functions,
             foldings: vec![],
@@ -182,8 +176,8 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
         }
     }
 
-    pub fn commit_functions(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T, N>>>>) {
-        for i in 0..N {
+    pub fn commit_functions(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T>>>>) {
+        for i in 0..self.total_round {
             for (idx, j) in verifiers.into_iter().enumerate() {
                 let function = self.functions[i].get_function(idx);
                 j.borrow_mut()
@@ -192,8 +186,8 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
         }
     }
 
-    pub fn commit_foldings(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T, N>>>>) {
-        for i in 0..(N - 1) {
+    pub fn commit_foldings(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T>>>>) {
+        for i in 0..(self.total_round - 1) {
             for (idx, j) in verifiers.into_iter().enumerate() {
                 let interpolation = self.foldings[i].get_interpolation(idx);
                 j.borrow_mut()
@@ -238,7 +232,7 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
             let x = get_folding_value(i);
             let nx = get_folding_value(i + len / 2);
             let new_v = (x + nx) + challenge * (x - nx) * shift_inv;
-            if round == 0 || round == N - 1 {
+            if round == 0 || round == self.total_round - 1 {
                 res.push(new_v);
             } else {
                 let fv = &self.functions[round].functions[rolling_function_index];
@@ -253,9 +247,9 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
     }
 
     pub fn prove(&mut self) {
-        for i in 0..N {
+        for i in 0..self.total_round {
             let challenge = self.oracle.borrow_mut().generate_challenge();
-            if i < N - 1 {
+            if i < self.total_round - 1 {
                 let mut interpolates = vec![];
                 for j in 0..self.functions[i].len() {
                     let next_evalutation = self.evaluation_next_domain(i, j, challenge);
@@ -278,7 +272,7 @@ impl<T: Field, const N: usize> One2ManyProver<T, N> {
         let mut functions_res = vec![];
         let mut leaf_indices = self.oracle.borrow().query_list();
 
-        for i in 0..N {
+        for i in 0..self.total_round {
             let len = self.functions[i].field_size();
             leaf_indices = leaf_indices.iter_mut().map(|v| *v % (len >> 1)).collect();
             leaf_indices.sort();

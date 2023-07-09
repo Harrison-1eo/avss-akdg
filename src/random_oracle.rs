@@ -14,6 +14,11 @@ impl<T: Field> RandomOracle<T> {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.folding_challenges.clear();
+        self.usize_elements = None
+    }
+
     pub fn query_list(&self) -> Vec<usize> {
         self.usize_elements.clone().unwrap()
     }

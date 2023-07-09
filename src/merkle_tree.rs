@@ -1,6 +1,6 @@
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Blake3Algorithm {}
 
 impl Hasher for Blake3Algorithm {
@@ -11,10 +11,12 @@ impl Hasher for Blake3Algorithm {
     }
 }
 
+#[derive(Clone)]
 pub struct MerkleTreeProver {
     pub merkle_tree: MerkleTree<Blake3Algorithm>,
 }
 
+#[derive(Debug, Clone)]
 pub struct MerkleTreeVerifier {
     pub merkle_root: [u8; 32],
     pub leave_number: usize,

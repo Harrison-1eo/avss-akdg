@@ -1,3 +1,4 @@
+use crate::random_oracle::RandomOracle;
 use crate::util::QueryResult;
 use crate::{
     algebra::{coset::Coset, field::Field},
@@ -5,28 +6,33 @@ use crate::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-use crate::random_oracle::RandomOracle;
-
-pub struct One2ManyVerifier<T: Field, const N: usize> {
+#[derive(Clone)]
+pub struct One2ManyVerifier<T: Field> {
+    total_round: usize,
     interpolate_cosets: Vec<Coset<T>>,
     function_root: Vec<MerkleTreeVerifier>,
-    function_maps: Vec<Box<dyn Fn(T, T, T) -> T>>,
+    function_maps: Vec<Rc<dyn Fn(T, T, T) -> T>>,
     folding_root: Vec<MerkleTreeVerifier>,
     oracle: Rc<RefCell<RandomOracle<T>>>,
     final_value: Option<T>,
 }
 
-impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
-    pub fn new_with_default_map(coset: &Coset<T>, oracle: &Rc<RefCell<RandomOracle<T>>>) -> Self {
+impl<T: Field> One2ManyVerifier<T> {
+    pub fn new_with_default_map(
+        total_round: usize,
+        coset: &Coset<T>,
+        oracle: &Rc<RefCell<RandomOracle<T>>>,
+    ) -> Self {
         let mut cosets = vec![coset.clone()];
-        for _ in 1..N {
+        for _ in 1..total_round {
             cosets.push(cosets.last().as_ref().unwrap().pow(2));
         }
         One2ManyVerifier {
+            total_round,
             interpolate_cosets: cosets,
             function_root: vec![],
-            function_maps: (0..N)
-                .map(|_| Box::new(move |v: T, _: T, _: T| v) as Box<dyn Fn(T, T, T) -> T>)
+            function_maps: (0..total_round)
+                .map(|_| Rc::new(move |v: T, _: T, _: T| v) as Rc<dyn Fn(T, T, T) -> T>)
                 .collect(),
             folding_root: vec![],
             oracle: oracle.clone(),
@@ -34,12 +40,17 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
         }
     }
 
-    pub fn new(coset: &Coset<T>, oracle: &Rc<RefCell<RandomOracle<T>>>) -> Self {
+    pub fn new(
+        total_round: usize,
+        coset: &Coset<T>,
+        oracle: &Rc<RefCell<RandomOracle<T>>>,
+    ) -> Self {
         let mut cosets = vec![coset.clone()];
-        for _ in 1..N {
+        for _ in 1..total_round {
             cosets.push(cosets.last().as_ref().unwrap().pow(2));
         }
         One2ManyVerifier {
+            total_round,
             interpolate_cosets: cosets,
             function_root: vec![],
             function_maps: vec![],
@@ -49,7 +60,7 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
         }
     }
 
-    pub fn set_map(&mut self, function_map: Box<dyn Fn(T, T, T) -> T>) {
+    pub fn set_map(&mut self, function_map: Rc<dyn Fn(T, T, T) -> T>) {
         self.function_maps.push(function_map);
     }
 
@@ -86,7 +97,7 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
         let mut shift_inv = self.interpolate_cosets[0].shift().inverse();
         let mut generator_inv = self.interpolate_cosets[0].generator().inverse();
         let mut domain_size = self.interpolate_cosets[0].size();
-        for i in 0..N {
+        for i in 0..self.total_round {
             leaf_indices = leaf_indices
                 .iter_mut()
                 .map(|v| *v % (domain_size >> 1))
@@ -124,7 +135,7 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
                 let x = get_folding_value(j);
                 let nx = get_folding_value(&(j + domain_size / 2));
                 let v = x + nx + challenge * (x - nx) * shift_inv * generator_inv.pow(*j);
-                if i == N - 1 {
+                if i == self.total_round - 1 {
                     if v != self.final_value.unwrap() {
                         return false;
                     }
@@ -158,7 +169,7 @@ impl<T: Field, const N: usize> One2ManyVerifier<T, N> {
                             * (x - nx)
                             * shift_inv
                             * generator_inv.pow(*j);
-                    if i < N - 1 {
+                    if i < self.total_round - 1 {
                         assert_eq!(v, function_proofs[i + 1].proof_values[j] * T::from_int(2));
                     } else {
                         assert_eq!(v, extra_final_value.unwrap() * T::from_int(2));

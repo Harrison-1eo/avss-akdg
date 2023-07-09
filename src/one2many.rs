@@ -47,6 +47,7 @@ mod tests {
             .into_iter()
             .map(|_| {
                 Rc::new(RefCell::new(One2ManyVerifier::new(
+                    8,
                     &interpolate_coset,
                     &oracle,
                 )))
@@ -54,11 +55,10 @@ mod tests {
             .collect::<Vec<_>>();
         verifiers.iter().for_each(|x| {
             for _ in 0..8 {
-                x.borrow_mut().set_map(Box::new(|v, x, c| v + c * x));
+                x.borrow_mut().set_map(Rc::new(|v, x, c| v + c * x));
             }
         });
-        let mut prover: One2ManyProver<Mersenne61Ext, 8> =
-            One2ManyProver::new(&interpolate_coset, functions_value, &oracle);
+        let mut prover = One2ManyProver::new(8, &interpolate_coset, functions_value, &oracle);
         prover.commit_functions(&verifiers);
         prover.prove();
         prover.commit_foldings(&verifiers);

@@ -18,6 +18,7 @@ pub trait Field:
 {
     const LOG_ORDER: u64;
     const ROOT_OF_UNITY: Self;
+    const INVERSE_2: Self;
 
     fn from_int(x: u64) -> Self;
     fn random_element() -> Self;
@@ -79,6 +80,7 @@ mod field_tests {
             assert_eq!(a * b, T::from_int(1));
             assert_eq!(b * a, T::from_int(1));
         }
+        assert_eq!(T::INVERSE_2 * T::from_int(2), T::from_int(1));
     }
 
     pub fn assigns<T: Field>() {

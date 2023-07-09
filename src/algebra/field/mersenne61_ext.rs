@@ -1,4 +1,5 @@
 use core::arch::x86_64::_mulx_u64;
+use super::Field;
 use rand::Rng;
 
 #[derive(Debug, Clone, Copy)]
@@ -121,6 +122,10 @@ impl super::Field for Mersenne61Ext {
     const ROOT_OF_UNITY: Mersenne61Ext = Mersenne61Ext {
         real: 2147483648,
         image: 1033321771269002680,
+    };
+    const INVERSE_2: Self = Mersenne61Ext {
+        real: 1152921504606846976,
+        image: 0
     };
 
     fn from_int(x: u64) -> Self {
