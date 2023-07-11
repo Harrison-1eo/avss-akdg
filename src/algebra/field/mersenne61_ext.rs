@@ -1,5 +1,5 @@
-use core::arch::x86_64::_mulx_u64;
 use super::Field;
+use core::arch::x86_64::_mulx_u64;
 use rand::Rng;
 
 #[derive(Debug, Clone, Copy)]
@@ -33,8 +33,8 @@ impl std::ops::Add for Mersenne61Ext {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         Self {
-            real: (self.real + rhs.real) % MOD,
-            image: (self.image + rhs.image) % MOD,
+            real: try_sub(self.real + rhs.real),
+            image: try_sub(self.image + rhs.image),
         }
     }
 }
@@ -117,7 +117,7 @@ impl std::cmp::PartialEq for Mersenne61Ext {
     }
 }
 
-impl super::Field for Mersenne61Ext {
+impl Field for Mersenne61Ext {
     const LOG_ORDER: u64 = 62;
     const ROOT_OF_UNITY: Mersenne61Ext = Mersenne61Ext {
         real: 2147483648,
@@ -125,7 +125,7 @@ impl super::Field for Mersenne61Ext {
     };
     const INVERSE_2: Self = Mersenne61Ext {
         real: 1152921504606846976,
-        image: 0
+        image: 0,
     };
 
     fn from_int(x: u64) -> Self {

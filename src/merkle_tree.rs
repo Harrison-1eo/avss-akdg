@@ -14,6 +14,7 @@ impl Hasher for Blake3Algorithm {
 #[derive(Clone)]
 pub struct MerkleTreeProver {
     pub merkle_tree: MerkleTree<Blake3Algorithm>,
+    leave_num: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -29,11 +30,14 @@ impl MerkleTreeProver {
             .map(|x| Blake3Algorithm::hash(x))
             .collect();
         let merkle_tree = MerkleTree::<Blake3Algorithm>::from_leaves(&leaves);
-        Self { merkle_tree }
+        Self {
+            merkle_tree,
+            leave_num: leaf_values.len(),
+        }
     }
 
     pub fn leave_num(&self) -> usize {
-        self.merkle_tree.leaves_len()
+        self.leave_num
     }
 
     pub fn commit(&self) -> [u8; 32] {

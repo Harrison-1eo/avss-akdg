@@ -13,20 +13,21 @@ mod tests {
 
     #[test]
     fn test_one_to_many_rolling_fri() {
-        let shift = Mersenne61Ext::random_element();
-        let interpolate_coset = Coset::new(1 << 11, shift);
         let mut functions_value = vec![];
-        let size_each_round = vec![1, 8, 16, 32, 64, 512, 1024, 2048];
-        let mut domain_size = interpolate_coset.size();
-        let mut shift = interpolate_coset.shift();
-        for size in size_each_round {
-            let current_domain = Coset::new(domain_size, shift);
-            let polies = (0..size)
+        let size_each_round = vec![1, 8, 16, 32, 64];
+        let mut interpolate_cosets = vec![Coset::new(1 << 11, Mersenne61Ext::random_element())];
+        for i in 1..8 {
+            interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
+        }
+        for i in size_each_round.iter().enumerate() {
+            let current_domain = &interpolate_cosets[i.0];
+            let functions = (0..(*i.1))
                 .into_iter()
                 .map(|_| {
                     (
-                        current_domain
-                            .fft(Polynomial::random_polynomial(domain_size / 8).coefficients()),
+                        current_domain.fft(
+                            Polynomial::random_polynomial(current_domain.size() / 8).coefficients(),
+                        ),
                         Box::new(|v, x, c| v + c * x)
                             as Box<
                                 dyn Fn(
@@ -38,17 +39,16 @@ mod tests {
                     )
                 })
                 .collect();
-            functions_value.push(polies);
-            domain_size >>= 1;
-            shift *= shift;
+            functions_value.push(functions);
         }
         let oracle = Rc::new(RefCell::new(RandomOracle::new()));
         let verifiers = (0..4096)
             .into_iter()
             .map(|_| {
                 Rc::new(RefCell::new(One2ManyVerifier::new(
+                    5,
                     8,
-                    &interpolate_coset,
+                    &interpolate_cosets,
                     &oracle,
                 )))
             })
@@ -58,7 +58,7 @@ mod tests {
                 x.borrow_mut().set_map(Rc::new(|v, x, c| v + c * x));
             }
         });
-        let mut prover = One2ManyProver::new(8, &interpolate_coset, functions_value, &oracle);
+        let mut prover = One2ManyProver::new(5, &interpolate_cosets, functions_value, &oracle);
         prover.commit_functions(&verifiers);
         prover.prove();
         prover.commit_foldings(&verifiers);
@@ -66,8 +66,8 @@ mod tests {
         let (folding, function) = prover.query();
         let mut folding715 = vec![];
         let mut function715 = vec![];
-        for i in 0..8 {
-            if i < 7 {
+        for i in 0..5 {
+            if i < 4 {
                 folding715.push(folding[i][715 % folding[i].len()].clone());
             }
             function715.push(function[i][715 % function[i].len()].clone());

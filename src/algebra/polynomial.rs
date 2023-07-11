@@ -1,6 +1,7 @@
 use super::coset::Coset;
 use super::field::Field;
 
+#[derive(Debug, Clone)]
 pub struct Polynomial<T: Field> {
     coefficients: Vec<T>,
 }
@@ -78,7 +79,7 @@ impl<T: Field> MultilinearPolynomial<T> {
         &self.coefficients
     }
 
-    fn new(coefficients: Vec<T>) -> Self {
+    pub fn new(coefficients: Vec<T>) -> Self {
         let len = coefficients.len();
         assert_eq!(len & (len - 1), 0);
         MultilinearPolynomial { coefficients }

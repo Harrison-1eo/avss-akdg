@@ -20,12 +20,10 @@ impl<T: Field> Radix2Domain<T> {
     }
 
     pub fn fft(&self, a: &mut Vec<T>) {
-        assert_eq!(a.len(), self.order);
         _fft(a, self.omega);
     }
 
     pub fn ifft(&self, a: &mut Vec<T>) {
-        assert_eq!(a.len(), self.order);
         _fft(a, self.omega.inverse());
         let t = T::from_int(self.order as u64).inverse();
         for i in a {
@@ -92,6 +90,7 @@ use std::{cell::RefCell, rc::Rc};
 #[derive(Debug, Clone)]
 pub struct Coset<T: Field> {
     elements: Rc<RefCell<Vec<T>>>,
+    elements_inv: Rc<RefCell<Vec<T>>>,
     fft_eval_domain: Radix2Domain<T>,
     shift: T,
 }
@@ -102,6 +101,7 @@ impl<T: Field> Coset<T> {
         let omega = T::get_generator(order);
         Coset {
             elements: Rc::new(RefCell::new(vec![])),
+            elements_inv: Rc::new(RefCell::new(vec![])),
             fft_eval_domain: Radix2Domain::new(order, omega),
             shift,
         }
@@ -116,6 +116,7 @@ impl<T: Field> Coset<T> {
         let omega = self.generator().pow(index);
         Coset {
             elements: Rc::new(RefCell::new(vec![])),
+            elements_inv: Rc::new(RefCell::new(vec![])),
             fft_eval_domain: Radix2Domain::new(self.order() / lowbit, omega),
             shift: self.shift.pow(index),
         }
@@ -129,14 +130,43 @@ impl<T: Field> Coset<T> {
         let mut elements = self.elements.borrow_mut();
         if elements.len() == 0 {
             let mut el = self.shift;
+            let omega = self.generator();
             for _i in 0..self.fft_eval_domain.order() {
                 elements.push(el);
-                el *= self.fft_eval_domain.omega();
+                el *= omega;
             }
             elements[index]
         } else {
             elements[index]
         }
+    }
+
+    pub fn element_inv_at(&self, index: usize) -> T {
+        let mut elements_inv = self.elements_inv.borrow_mut();
+        if elements_inv.len() == 0 {
+            let mut el = self.shift.inverse();
+            let omega_inv = self.generator().pow(self.order() - 1);
+            for _i in 0..self.fft_eval_domain.order() {
+                elements_inv.push(el);
+                el *= omega_inv;
+            }
+            elements_inv[index]
+        } else {
+            elements_inv[index]
+        }
+    }
+
+    pub fn all_elements_inv(&self) -> Vec<T> {
+        let mut elements_inv = self.elements_inv.borrow_mut();
+        if elements_inv.len() == 0 {
+            let mut el = self.shift.inverse();
+            let omega_inv = self.generator().pow(self.order() - 1);
+            for _i in 0..self.fft_eval_domain.order() {
+                elements_inv.push(el);
+                el *= omega_inv;
+            }
+        }
+        elements_inv.clone()
     }
 
     pub fn all_elements(&self) -> Vec<T> {
@@ -156,7 +186,6 @@ impl<T: Field> Coset<T> {
     }
 
     pub fn fft(&self, coeff: &Vec<T>) -> Vec<T> {
-        assert!(self.size() >= coeff.len());
         let mut a = coeff.clone();
         let n = self.size() - a.len();
         for _i in 0..n {

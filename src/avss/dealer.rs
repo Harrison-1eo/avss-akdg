@@ -12,60 +12,59 @@ use crate::{
 
 pub struct Dealer<T: Field> {
     prover: One2ManyProver<T>,
-    evaluations: Vec<T>,
+    evaluations: Vec<MultilinearPolynomial<T>>,
 }
 
 impl<T: Field + 'static> Dealer<T> {
-    fn fold(values: &Vec<T>, parameter: T, mut shift_inv: T, generator_inv: T) -> Vec<T> {
-        let mut res = vec![];
+    fn fold(values: &Vec<T>, parameter: T, coset: &Coset<T>) -> Vec<T> {
         let len = values.len() / 2;
-        for i in 0..len {
-            let x = values[i];
-            let nx = values[i + len];
-            let new_v = (x + nx) + parameter * (x - nx) * shift_inv;
-            res.push(new_v * T::from_int(2).inverse());
-            shift_inv *= generator_inv;
-        }
+        let res = (0..len)
+            .into_iter()
+            .map(|i| {
+                let x = values[i];
+                let nx = values[i + len];
+                let new_v = (x + nx) + parameter * (x - nx) * coset.element_inv_at(i);
+                new_v * T::INVERSE_2
+            })
+            .collect();
         res
     }
 
     fn batch_folding(
+        total_round: usize,
         polynomial: &MultilinearPolynomial<T>,
         folding_parameter: &Vec<Vec<T>>,
-        coset: &Coset<T>,
-    ) -> (Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>>, Vec<T>) {
-        let mut shift_inv = coset.shift().inverse();
-        let mut generator_inv = coset.generator().inverse();
+        coset: &Vec<Coset<T>>,
+    ) -> (
+        Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>>,
+        Vec<MultilinearPolynomial<T>>,
+    ) {
         let mut res = vec![vec![(
-            coset.fft(polynomial.coefficients()),
+            coset[0].fft(polynomial.coefficients()),
             Box::new(move |v: T, _x: T, _c: T| v) as Box<dyn Fn(T, T, T) -> T>,
         )]];
+        let variable_num = polynomial.variable_num();
         let mut evaluations = vec![];
-        let total_round = folding_parameter.len();
-        for (round, i) in folding_parameter.iter().enumerate() {
+        for round in 0..total_round {
+            let len = res[round].len();
             if round < total_round - 1 {
-                let mut polies = vec![];
-                for (index, j) in i.iter().enumerate() {
-                    polies.push((
-                        Self::fold(
-                            &res[round][index % res[round].len()].0,
-                            *j,
-                            shift_inv,
-                            generator_inv,
-                        ),
+                let mut evaluations = vec![];
+                for (index, j) in folding_parameter[round].iter().enumerate() {
+                    let next_evaluation =
+                        Self::fold(&res[round][index & (len - 1)].0, *j, &coset[round]);
+                    evaluations.push((
+                        next_evaluation,
                         Box::new(move |v: T, _x: T, _c: T| v) as Box<dyn Fn(T, T, T) -> T>,
                     ));
                 }
-                res.push(polies);
-                shift_inv *= shift_inv;
-                generator_inv *= generator_inv;
+                res.push(evaluations);
             } else {
-                for (index, j) in i.iter().enumerate() {
-                    let values = &res[round][index % res[round].len()].0;
-                    let x = values[0];
-                    let nx = values[values.len() / 2];
-                    let new_v = (x + nx) + (*j) * (x - nx) * shift_inv;
-                    evaluations.push(new_v * T::INVERSE_2);
+                for (index, j) in folding_parameter[round].iter().enumerate() {
+                    let next_evaluation =
+                        Self::fold(&res[round][index & (len - 1)].0, *j, &coset[round]);
+                    let mut coefficients = coset[round + 1].ifft(&next_evaluation);
+                    coefficients.truncate(1 << (variable_num - total_round));
+                    evaluations.push(MultilinearPolynomial::new(coefficients));
                 }
             }
         }
@@ -73,14 +72,18 @@ impl<T: Field + 'static> Dealer<T> {
     }
 
     pub fn new(
+        total_round: usize,
         polynomial: &MultilinearPolynomial<T>,
-        interpolate_coset: &Coset<T>,
+        interpolate_coset: &Vec<Coset<T>>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
         folding_parameter: &Vec<Vec<T>>,
     ) -> Self {
-        let total_round = polynomial.variable_num();
-        let (functions, evaluations) =
-            Self::batch_folding(polynomial, folding_parameter, interpolate_coset);
+        let (functions, evaluations) = Self::batch_folding(
+            total_round,
+            polynomial,
+            folding_parameter,
+            interpolate_coset,
+        );
         Dealer {
             evaluations,
             prover: One2ManyProver::new(total_round, interpolate_coset, functions, oracle),
@@ -99,7 +102,7 @@ impl<T: Field + 'static> Dealer<T> {
 
     pub fn send_evaluations(&self, avss_party: &mut Vec<AvssParty<T>>) {
         for i in 0..avss_party.len() {
-            avss_party[i].set_share(self.evaluations[i]);
+            avss_party[i].set_share(&self.evaluations[i % self.evaluations.len()]);
         }
     }
 

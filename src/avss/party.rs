@@ -1,3 +1,4 @@
+use crate::algebra::polynomial::MultilinearPolynomial;
 use crate::random_oracle::RandomOracle;
 use crate::util::QueryResult;
 use crate::{
@@ -10,16 +11,19 @@ use std::{cell::RefCell, rc::Rc};
 pub struct AvssParty<T: Field> {
     pub verifier: Rc<RefCell<One2ManyVerifier<T>>>,
     open_point: Vec<T>,
-    share: Option<T>,
+    final_poly: Option<MultilinearPolynomial<T>>,
 }
 
 impl<T: Field + 'static> AvssParty<T> {
     pub fn share(&self) -> T {
-        self.share.unwrap()
+        let poly = self.final_poly.as_ref().unwrap();
+        let variable_num = poly.variable_num();
+        let n = self.open_point.len();
+        poly.evaluate(&self.open_point[n - variable_num..].to_vec())
     }
 
-    pub fn set_share(&mut self, share: T) {
-        self.share = Some(share);
+    pub fn set_share(&mut self, final_poly: &MultilinearPolynomial<T>) {
+        self.final_poly = Some(final_poly.clone());
     }
 
     pub fn open_point(&self) -> &Vec<T> {
@@ -27,18 +31,20 @@ impl<T: Field + 'static> AvssParty<T> {
     }
 
     pub fn new(
-        interpolate_coset: &Coset<T>,
+        total_round: usize,
+        interpolate_coset: &Vec<Coset<T>>,
         open_point: Vec<T>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
     ) -> AvssParty<T> {
         AvssParty {
             verifier: Rc::new(RefCell::new(One2ManyVerifier::new_with_default_map(
+                total_round,
                 open_point.len(),
                 interpolate_coset,
                 oracle,
             ))),
             open_point,
-            share: None,
+            final_poly: None,
         }
     }
 
@@ -51,7 +57,7 @@ impl<T: Field + 'static> AvssParty<T> {
             folding_proofs,
             function_proofs,
             &self.open_point,
-            self.share.unwrap(),
+            self.final_poly.as_ref().unwrap(),
         )
     }
 }

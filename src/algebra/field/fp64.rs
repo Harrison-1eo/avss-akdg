@@ -109,7 +109,7 @@ impl Field for Fp64 {
         real: 2741030659394132017u64,
     };
     const INVERSE_2: Self = Fp64 {
-        real: 9223372034707292161
+        real: 9223372034707292161,
     };
 
     fn from_int(x: u64) -> Fp64 {
