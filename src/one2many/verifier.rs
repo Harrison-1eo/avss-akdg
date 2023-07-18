@@ -13,7 +13,6 @@ pub struct One2ManyVerifier<T: Field> {
     log_max_degree: usize,
     interpolate_cosets: Vec<Coset<T>>,
     function_root: Vec<MerkleTreeVerifier>,
-    function_maps: Vec<Rc<dyn Fn(T, T, T) -> T>>,
     folding_root: Vec<MerkleTreeVerifier>,
     oracle: Rc<RefCell<RandomOracle<T>>>,
     final_value: Option<Polynomial<T>>,
@@ -31,9 +30,6 @@ impl<T: Field> One2ManyVerifier<T> {
             log_max_degree,
             interpolate_cosets: coset.clone(),
             function_root: vec![],
-            function_maps: (0..total_round)
-                .map(|_| Rc::new(move |v: T, _: T, _: T| v) as Rc<dyn Fn(T, T, T) -> T>)
-                .collect(),
             folding_root: vec![],
             oracle: oracle.clone(),
             final_value: None,
@@ -51,15 +47,10 @@ impl<T: Field> One2ManyVerifier<T> {
             log_max_degree,
             interpolate_cosets: coset.clone(),
             function_root: vec![],
-            function_maps: vec![],
             folding_root: vec![],
             oracle: oracle.clone(),
             final_value: None,
         }
-    }
-
-    pub fn set_map(&mut self, function_map: Rc<dyn Fn(T, T, T) -> T>) {
-        self.function_maps.push(function_map);
     }
 
     pub fn set_function(&mut self, leave_number: usize, function_root: &[u8; 32]) {
@@ -109,16 +100,10 @@ impl<T: Field> One2ManyVerifier<T> {
             }
 
             let challenge = self.oracle.borrow().get_challenge(i);
-            let get_folding_value = |index: &usize| {
-                if i == 0 {
-                    self.function_maps[i](
-                        function_proofs[i].proof_values[index],
-                        self.interpolate_cosets[i].element_at(*index),
-                        challenge,
-                    )
-                } else {
-                    folding_proofs[i - 1].proof_values[index]
-                }
+            let get_folding_value = if i == 0 {
+                &function_proofs[i].proof_values
+            } else {
+                &folding_proofs[i - 1].proof_values
             };
 
             let function_values = if i != 0 {
@@ -129,21 +114,13 @@ impl<T: Field> One2ManyVerifier<T> {
                 None
             };
             for j in &leaf_indices {
-                let x = get_folding_value(j);
-                let nx = get_folding_value(&(j + domain_size / 2));
+                let x = get_folding_value[j];
+                let nx = get_folding_value[&(j + domain_size / 2)];
                 let v =
                     x + nx + challenge * (x - nx) * self.interpolate_cosets[i].element_inv_at(*j);
                 if i != 0 {
-                    let x = self.function_maps[i](
-                        function_values.as_ref().unwrap()[j],
-                        self.interpolate_cosets[i].element_at(*j),
-                        challenge,
-                    );
-                    let nx = self.function_maps[i](
-                        function_values.as_ref().unwrap()[&(j + domain_size / 2)],
-                        self.interpolate_cosets[i].element_at(*j + domain_size / 2),
-                        challenge,
-                    );
+                    let x = function_values.as_ref().unwrap()[j];
+                    let nx = function_values.as_ref().unwrap()[&(j + domain_size / 2)];
                     let v = (v * challenge + (x + nx)) * challenge
                         + (x - nx) * self.interpolate_cosets[i].element_inv_at(*j);
                     if i == self.total_round - 1 {

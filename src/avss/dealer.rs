@@ -35,14 +35,8 @@ impl<T: Field + 'static> Dealer<T> {
         polynomial: &MultilinearPolynomial<T>,
         folding_parameter: &Vec<Vec<T>>,
         coset: &Vec<Coset<T>>,
-    ) -> (
-        Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>>,
-        Vec<MultilinearPolynomial<T>>,
-    ) {
-        let mut res = vec![vec![(
-            coset[0].fft(polynomial.coefficients()),
-            Box::new(move |v: T, _x: T, _c: T| v) as Box<dyn Fn(T, T, T) -> T>,
-        )]];
+    ) -> (Vec<Vec<Vec<T>>>, Vec<MultilinearPolynomial<T>>) {
+        let mut res = vec![vec![(coset[0].fft(polynomial.coefficients()))]];
         let variable_num = polynomial.variable_num();
         let mut evaluations = vec![];
         for round in 0..total_round {
@@ -51,17 +45,14 @@ impl<T: Field + 'static> Dealer<T> {
                 let mut evaluations = vec![];
                 for (index, j) in folding_parameter[round].iter().enumerate() {
                     let next_evaluation =
-                        Self::fold(&res[round][index & (len - 1)].0, *j, &coset[round]);
-                    evaluations.push((
-                        next_evaluation,
-                        Box::new(move |v: T, _x: T, _c: T| v) as Box<dyn Fn(T, T, T) -> T>,
-                    ));
+                        Self::fold(&res[round][index & (len - 1)], *j, &coset[round]);
+                    evaluations.push(next_evaluation);
                 }
                 res.push(evaluations);
             } else {
                 for (index, j) in folding_parameter[round].iter().enumerate() {
                     let next_evaluation =
-                        Self::fold(&res[round][index & (len - 1)].0, *j, &coset[round]);
+                        Self::fold(&res[round][index & (len - 1)], *j, &coset[round]);
                     let mut coefficients = coset[round + 1].ifft(&next_evaluation);
                     coefficients.truncate(1 << (variable_num - total_round));
                     evaluations.push(MultilinearPolynomial::new(coefficients));

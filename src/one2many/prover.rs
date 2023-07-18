@@ -51,71 +51,25 @@ impl<T: Field> InterpolateValue<T> {
     }
 }
 
-struct FunctionValue<T: Field> {
-    interpolate: InterpolateValue<T>,
-    map: Box<dyn Fn(T, T, T) -> T>, // value, x, challenge
-}
-
-impl<T: Field> FunctionValue<T> {
-    fn new(value: Vec<T>, map: Box<dyn Fn(T, T, T) -> T>) -> Self {
-        Self {
-            interpolate: InterpolateValue::new(value),
-            map,
-        }
-    }
-
-    fn get_value(&self, index: usize, coset: &Coset<T>, challenge: T) -> T {
-        let v = self.interpolate.value[index];
-        (self.map)(v, coset.element_at(index), challenge)
-    }
-
-    fn commit(&self) -> [u8; 32] {
-        self.interpolate.merkle_tree.commit()
-    }
-
-    fn leave_number(&self) -> usize {
-        self.interpolate.merkle_tree.leave_num()
-    }
-
-    fn field_size(&self) -> usize {
-        self.interpolate.value.len()
-    }
-}
-
-struct CosetFunction<T: Field> {
-    pub functions: Vec<FunctionValue<T>>,
-}
-
-impl<T: Field> CosetFunction<T> {
-    fn new(functions: Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>) -> Self {
-        CosetFunction {
-            functions: functions
-                .into_iter()
-                .map(|(values, map)| FunctionValue::new(values, map))
-                .collect(),
-        }
-    }
-
-    fn field_size(&self) -> usize {
-        self.functions[0].field_size()
-    }
-
-    fn get_function(&self, index: usize) -> &FunctionValue<T> {
-        let len = self.functions.len();
-        assert_eq!(len & (len - 1), 0);
-        &self.functions[index % len]
-    }
-
-    fn len(&self) -> usize {
-        self.functions.len()
-    }
-}
-
 struct CosetInterpolate<T: Field> {
     interpolates: Vec<InterpolateValue<T>>,
 }
 
 impl<T: Field> CosetInterpolate<T> {
+    fn len(&self) -> usize {
+        self.interpolates.len()
+    }
+    fn new(functions: Vec<Vec<T>>) -> Self {
+        CosetInterpolate {
+            interpolates: functions
+                .into_iter()
+                .map(|values| InterpolateValue::new(values))
+                .collect(),
+        }
+    }
+    fn field_size(&self) -> usize {
+        self.interpolates[0].value.len()
+    }
     fn from_interpolates(interpolates: Vec<InterpolateValue<T>>) -> Self {
         CosetInterpolate { interpolates }
     }
@@ -130,7 +84,7 @@ impl<T: Field> CosetInterpolate<T> {
 pub struct One2ManyProver<T: Field> {
     total_round: usize,
     interpolate_cosets: Vec<Coset<T>>,
-    functions: Vec<CosetFunction<T>>,
+    functions: Vec<CosetInterpolate<T>>,
     foldings: Vec<CosetInterpolate<T>>,
     oracle: Rc<RefCell<RandomOracle<T>>>,
     final_value: Vec<Polynomial<T>>,
@@ -140,13 +94,13 @@ impl<T: Field> One2ManyProver<T> {
     pub fn new(
         total_round: usize,
         interpolate_coset: &Vec<Coset<T>>,
-        functions: Vec<Vec<(Vec<T>, Box<dyn Fn(T, T, T) -> T>)>>,
+        functions: Vec<Vec<Vec<T>>>,
         oracle: &Rc<RefCell<RandomOracle<T>>>,
     ) -> One2ManyProver<T> {
         assert_eq!(total_round, functions.len());
-        let functions: Vec<CosetFunction<T>> = functions
+        let functions: Vec<CosetInterpolate<T>> = functions
             .into_iter()
-            .map(|x| CosetFunction::new(x))
+            .map(|x| CosetInterpolate::new(x))
             .collect();
 
         One2ManyProver {
@@ -162,9 +116,9 @@ impl<T: Field> One2ManyProver<T> {
     pub fn commit_functions(&self, verifiers: &Vec<Rc<RefCell<One2ManyVerifier<T>>>>) {
         for i in 0..self.total_round {
             for (idx, j) in verifiers.into_iter().enumerate() {
-                let function = self.functions[i].get_function(idx);
+                let function = self.functions[i].get_interpolation(idx);
                 j.borrow_mut()
-                    .set_function(function.leave_number(), &function.commit());
+                    .set_function(function.leave_num(), &function.commit());
             }
         }
     }
@@ -192,30 +146,22 @@ impl<T: Field> One2ManyProver<T> {
     ) -> Vec<T> {
         let mut res = vec![];
         let len = self.functions[round].field_size();
-        let get_folding_value = |i: usize| {
-            if round == 0 {
-                self.functions[round].get_function(0).get_value(
-                    i,
-                    &self.interpolate_cosets[round],
-                    challenge,
-                )
-            } else {
-                self.foldings[round - 1]
-                    .get_interpolation(rolling_function_index)
-                    .value[i]
-            }
+        let get_folding_value = if round == 0 {
+            self.functions[round].get_interpolation(rolling_function_index)
+        } else {
+            self.foldings[round - 1].get_interpolation(rolling_function_index)
         };
         let coset = &self.interpolate_cosets[round];
         for i in 0..(len / 2) {
-            let x = get_folding_value(i);
-            let nx = get_folding_value(i + len / 2);
+            let x = get_folding_value.value[i];
+            let nx = get_folding_value.value[i + len / 2];
             let new_v = (x + nx) + challenge * (x - nx) * coset.element_inv_at(i);
             if round == 0 {
                 res.push(new_v);
             } else {
-                let fv = &self.functions[round].functions[rolling_function_index];
-                let x = fv.get_value(i, &coset, challenge);
-                let nx = fv.get_value(i + len / 2, &coset, challenge);
+                let fv = &self.functions[round].interpolates[rolling_function_index];
+                let x = fv.value[i];
+                let nx = fv.value[i + len / 2];
                 let new_v =
                     (new_v * challenge + (x + nx)) * challenge + (x - nx) * coset.element_inv_at(i);
                 res.push(new_v);
@@ -257,12 +203,15 @@ impl<T: Field> One2ManyProver<T> {
             leaf_indices.sort();
             leaf_indices.dedup();
 
-            let f = |x: &FunctionValue<T>| x.interpolate.query(&leaf_indices);
             if i == 0 {
-                let query_result = f(self.functions[0].get_function(0));
+                let query_result = self.functions[0].get_interpolation(0).query(&leaf_indices);
                 functions_res.push(vec![query_result]);
             } else {
-                let query_result = self.functions[i].functions.iter().map(|x| f(x)).collect();
+                let query_result = self.functions[i]
+                    .interpolates
+                    .iter()
+                    .map(|x| x.query(&leaf_indices))
+                    .collect();
                 functions_res.push(query_result);
             }
 

@@ -24,18 +24,8 @@ mod tests {
             let functions = (0..(*i.1))
                 .into_iter()
                 .map(|_| {
-                    (
-                        current_domain.fft(
-                            Polynomial::random_polynomial(current_domain.size() / 8).coefficients(),
-                        ),
-                        Box::new(|v, x, c| v + c * x)
-                            as Box<
-                                dyn Fn(
-                                    Mersenne61Ext,
-                                    Mersenne61Ext,
-                                    Mersenne61Ext,
-                                ) -> Mersenne61Ext,
-                            >,
+                    current_domain.fft(
+                        Polynomial::random_polynomial(current_domain.size() / 8).coefficients(),
                     )
                 })
                 .collect();
@@ -53,11 +43,7 @@ mod tests {
                 )))
             })
             .collect::<Vec<_>>();
-        verifiers.iter().for_each(|x| {
-            for _ in 0..8 {
-                x.borrow_mut().set_map(Rc::new(|v, x, c| v + c * x));
-            }
-        });
+
         let mut prover = One2ManyProver::new(5, &interpolate_cosets, functions_value, &oracle);
         prover.commit_functions(&verifiers);
         prover.prove();
