@@ -1,11 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use super::party::AvssParty;
 use crate::one2many::prover::One2ManyProver;
-use util::random_oracle::RandomOracle;
-use util::query_result::QueryResult;
 use util::algebra::{coset::Coset, field::Field, polynomial::MultilinearPolynomial};
+use util::query_result::QueryResult;
+use util::random_oracle::RandomOracle;
 
 pub struct Dealer<T: Field> {
     prover: One2ManyProver<T>,

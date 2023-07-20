@@ -8,8 +8,9 @@ use util::{
     algebra::{
         coset::Coset,
         field::{as_bytes_vec, Field},
-    },random_oracle::RandomOracle,
+    },
     merkle_tree::MerkleTreeProver,
+    random_oracle::RandomOracle,
 };
 
 struct InterpolateValue<T: Field> {

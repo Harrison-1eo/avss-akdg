@@ -4,8 +4,8 @@ pub mod algebra {
     pub mod polynomial;
 }
 pub mod merkle_tree;
-pub mod random_oracle;
 pub mod query_result;
+pub mod random_oracle;
 
 pub fn split_n(mut n: usize) -> Vec<usize> {
     let mut res = vec![];

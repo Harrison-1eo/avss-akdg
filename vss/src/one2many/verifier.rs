@@ -1,10 +1,9 @@
-use util::random_oracle::RandomOracle;
-use std::{cell::RefCell, rc::Rc};
 use util::algebra::polynomial::{MultilinearPolynomial, Polynomial};
+use util::random_oracle::RandomOracle;
 use util::{
     algebra::{coset::Coset, field::Field},
     merkle_tree::MerkleTreeVerifier,
-    query_result::QueryResult
+    query_result::QueryResult,
 };
 
 #[derive(Clone)]

@@ -1,8 +1,8 @@
 use crate::one2many::verifier::One2ManyVerifier;
-use util::random_oracle::RandomOracle;
-use util::query_result::QueryResult;
 use std::{cell::RefCell, rc::Rc};
 use util::algebra::{coset::Coset, field::Field, polynomial::MultilinearPolynomial};
+use util::query_result::QueryResult;
+use util::random_oracle::RandomOracle;
 
 #[derive(Clone)]
 pub struct AvssParty<T: Field> {

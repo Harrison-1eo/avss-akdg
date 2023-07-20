@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::algebra::field::{as_bytes_vec, Field};
 use crate::merkle_tree::MerkleTreeVerifier;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct QueryResult<T: Field> {

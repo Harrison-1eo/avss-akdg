@@ -2,13 +2,11 @@ extern crate criterion;
 
 use criterion::*;
 
-use std::{cell::RefCell, rc::Rc};
-
 use util::algebra::field::Field;
 use util::algebra::polynomial::MultilinearPolynomial;
+use util::random_oracle::RandomOracle;
 use vss::avss::dealer::Dealer;
 use vss::avss::party::AvssParty;
-use util::random_oracle::RandomOracle;
 
 use util::algebra::coset::Coset;
 use util::algebra::field::mersenne61_ext::Mersenne61Ext;
