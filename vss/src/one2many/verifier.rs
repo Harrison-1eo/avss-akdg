@@ -1,11 +1,11 @@
-use crate::algebra::polynomial::{MultilinearPolynomial, Polynomial};
-use crate::random_oracle::RandomOracle;
-use crate::util::QueryResult;
-use crate::{
+use util::random_oracle::RandomOracle;
+use std::{cell::RefCell, rc::Rc};
+use util::algebra::polynomial::{MultilinearPolynomial, Polynomial};
+use util::{
     algebra::{coset::Coset, field::Field},
     merkle_tree::MerkleTreeVerifier,
+    query_result::QueryResult
 };
-use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
 pub struct One2ManyVerifier<T: Field> {
@@ -14,7 +14,7 @@ pub struct One2ManyVerifier<T: Field> {
     interpolate_cosets: Vec<Coset<T>>,
     function_root: Vec<MerkleTreeVerifier>,
     folding_root: Vec<MerkleTreeVerifier>,
-    oracle: Rc<RefCell<RandomOracle<T>>>,
+    oracle: RandomOracle<T>,
     final_value: Option<Polynomial<T>>,
 }
 
@@ -23,7 +23,7 @@ impl<T: Field> One2ManyVerifier<T> {
         total_round: usize,
         log_max_degree: usize,
         coset: &Vec<Coset<T>>,
-        oracle: &Rc<RefCell<RandomOracle<T>>>,
+        oracle: &RandomOracle<T>,
     ) -> Self {
         One2ManyVerifier {
             total_round,
@@ -40,7 +40,7 @@ impl<T: Field> One2ManyVerifier<T> {
         total_round: usize,
         log_max_degree: usize,
         coset: &Vec<Coset<T>>,
-        oracle: &Rc<RefCell<RandomOracle<T>>>,
+        oracle: &RandomOracle<T>,
     ) -> Self {
         One2ManyVerifier {
             total_round,
@@ -83,7 +83,7 @@ impl<T: Field> One2ManyVerifier<T> {
             Some(_) => true,
             None => false,
         };
-        let mut leaf_indices = self.oracle.borrow().query_list();
+        let mut leaf_indices = self.oracle.query_list.clone();
         for i in 0..self.total_round {
             let domain_size = self.interpolate_cosets[i].size();
             leaf_indices = leaf_indices
@@ -99,7 +99,7 @@ impl<T: Field> One2ManyVerifier<T> {
                 folding_proofs[i - 1].verify_merkle_tree(&leaf_indices, &self.folding_root[i - 1]);
             }
 
-            let challenge = self.oracle.borrow().get_challenge(i);
+            let challenge = self.oracle.folding_challenges[i];
             let get_folding_value = if i == 0 {
                 &function_proofs[i].proof_values
             } else {

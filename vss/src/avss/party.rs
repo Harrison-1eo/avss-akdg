@@ -1,11 +1,8 @@
-use crate::algebra::polynomial::MultilinearPolynomial;
-use crate::random_oracle::RandomOracle;
-use crate::util::QueryResult;
-use crate::{
-    algebra::{coset::Coset, field::Field},
-    one2many::verifier::One2ManyVerifier,
-};
+use crate::one2many::verifier::One2ManyVerifier;
+use util::random_oracle::RandomOracle;
+use util::query_result::QueryResult;
 use std::{cell::RefCell, rc::Rc};
+use util::algebra::{coset::Coset, field::Field, polynomial::MultilinearPolynomial};
 
 #[derive(Clone)]
 pub struct AvssParty<T: Field> {
@@ -34,7 +31,7 @@ impl<T: Field + 'static> AvssParty<T> {
         total_round: usize,
         interpolate_coset: &Vec<Coset<T>>,
         open_point: Vec<T>,
-        oracle: &Rc<RefCell<RandomOracle<T>>>,
+        oracle: &RandomOracle<T>,
     ) -> AvssParty<T> {
         AvssParty {
             verifier: Rc::new(RefCell::new(One2ManyVerifier::new_with_default_map(

@@ -263,12 +263,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dyn-clone"
-version = "1.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68b0cf012f1230e43cd00ebb729c6bb58707ecfa8ad08b52ef3a4ccd2697fc30"
-
-[[package]]
 name = "either"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -683,6 +677,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22049a19f4a68748a168c0fc439f9516686aa045927ff767eca0a85101fb6e73"
 
 [[package]]
+name = "util"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "rand",
+ "rs_merkle",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -694,10 +698,10 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "criterion",
- "dyn-clone",
  "hex",
  "rand",
  "rs_merkle",
+ "util",
 ]
 
 [[package]]

@@ -1,15 +1,14 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::verifier::One2ManyVerifier;
-use crate::algebra::polynomial::Polynomial;
-use crate::random_oracle::RandomOracle;
+use util::algebra::polynomial::Polynomial;
 
-use crate::util::QueryResult;
-use crate::{
+use util::query_result::QueryResult;
+use util::{
     algebra::{
         coset::Coset,
         field::{as_bytes_vec, Field},
-    },
+    },random_oracle::RandomOracle,
     merkle_tree::MerkleTreeProver,
 };
 
@@ -86,7 +85,7 @@ pub struct One2ManyProver<T: Field> {
     interpolate_cosets: Vec<Coset<T>>,
     functions: Vec<CosetInterpolate<T>>,
     foldings: Vec<CosetInterpolate<T>>,
-    oracle: Rc<RefCell<RandomOracle<T>>>,
+    oracle: RandomOracle<T>,
     final_value: Vec<Polynomial<T>>,
 }
 
@@ -95,7 +94,7 @@ impl<T: Field> One2ManyProver<T> {
         total_round: usize,
         interpolate_coset: &Vec<Coset<T>>,
         functions: Vec<Vec<Vec<T>>>,
-        oracle: &Rc<RefCell<RandomOracle<T>>>,
+        oracle: &RandomOracle<T>,
     ) -> One2ManyProver<T> {
         assert_eq!(total_round, functions.len());
         let functions: Vec<CosetInterpolate<T>> = functions
@@ -172,7 +171,7 @@ impl<T: Field> One2ManyProver<T> {
 
     pub fn prove(&mut self) {
         for i in 0..self.total_round {
-            let challenge = self.oracle.borrow_mut().generate_challenge();
+            let challenge = self.oracle.folding_challenges[i];
             if i < self.total_round - 1 {
                 let mut interpolates = vec![];
                 for j in 0..self.functions[i].len() {
@@ -195,7 +194,7 @@ impl<T: Field> One2ManyProver<T> {
     pub fn query(&self) -> (Vec<Vec<QueryResult<T>>>, Vec<Vec<QueryResult<T>>>) {
         let mut folding_res = vec![];
         let mut functions_res = vec![];
-        let mut leaf_indices = self.oracle.borrow().query_list();
+        let mut leaf_indices = self.oracle.query_list.clone();
 
         for i in 0..self.total_round {
             let len = self.functions[i].field_size();

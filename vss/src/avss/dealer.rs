@@ -2,13 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::party::AvssParty;
-use crate::algebra::coset::Coset;
-use crate::random_oracle::RandomOracle;
-use crate::util::QueryResult;
-use crate::{
-    algebra::{field::Field, polynomial::MultilinearPolynomial},
-    one2many::prover::One2ManyProver,
-};
+use crate::one2many::prover::One2ManyProver;
+use util::random_oracle::RandomOracle;
+use util::query_result::QueryResult;
+use util::algebra::{coset::Coset, field::Field, polynomial::MultilinearPolynomial};
 
 pub struct Dealer<T: Field> {
     prover: One2ManyProver<T>,
@@ -66,7 +63,7 @@ impl<T: Field + 'static> Dealer<T> {
         total_round: usize,
         polynomial: &MultilinearPolynomial<T>,
         interpolate_coset: &Vec<Coset<T>>,
-        oracle: &Rc<RefCell<RandomOracle<T>>>,
+        oracle: &RandomOracle<T>,
         folding_parameter: &Vec<Vec<T>>,
     ) -> Self {
         let (functions, evaluations) = Self::batch_folding(
