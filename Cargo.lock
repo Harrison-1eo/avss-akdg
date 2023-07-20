@@ -427,6 +427,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d5d9eb14b174ee9aa2ef96dc2b94637a2d4b6e7cb873c7e171f0c20c6cf3eac"
 
 [[package]]
+name = "pcs"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "util",
+]
+
+[[package]]
 name = "plotters"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -696,11 +704,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vss"
 version = "0.1.0"
 dependencies = [
- "blake3",
  "criterion",
- "hex",
- "rand",
- "rs_merkle",
  "util",
 ]
 
