@@ -4,15 +4,15 @@ use criterion::*;
 
 use std::{cell::RefCell, rc::Rc};
 
-use frolling::algebra::field::Field;
-use frolling::algebra::polynomial::MultilinearPolynomial;
-use frolling::avss::dealer::Dealer;
-use frolling::avss::party::AvssParty;
-use frolling::random_oracle::RandomOracle;
+use vss::algebra::field::Field;
+use vss::algebra::polynomial::MultilinearPolynomial;
+use vss::avss::dealer::Dealer;
+use vss::avss::party::AvssParty;
+use vss::random_oracle::RandomOracle;
 
-use frolling::algebra::coset::Coset;
-use frolling::algebra::field::mersenne61_ext::Mersenne61Ext;
-use frolling::util::split_n;
+use vss::algebra::coset::Coset;
+use vss::algebra::field::mersenne61_ext::Mersenne61Ext;
+use vss::util::split_n;
 
 fn vss_deal(log_n: usize, code_rate: usize, terminate_round: usize) {
     let log_t = log_n - 1;
