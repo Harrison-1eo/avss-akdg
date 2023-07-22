@@ -4,4 +4,5 @@ members = [
     "util",
     "pcs",
     "avss",
+    "gemini-fri"
 ]

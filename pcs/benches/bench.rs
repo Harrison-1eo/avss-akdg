@@ -11,6 +11,7 @@ use util::{
     random_oracle::RandomOracle,
 };
 
+const SECURITY_BITS: usize = 100;
 fn commit(
     criterion: &mut Criterion,
     variable_num: usize,
@@ -25,7 +26,7 @@ fn commit(
     for i in 1..variable_num {
         interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
     }
-    let oracle = RandomOracle::new(variable_num, 33);
+    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
 
     criterion.bench_function(&format!("commit {}", variable_num), move |b| {
         b.iter_batched(
@@ -61,7 +62,7 @@ fn open(criterion: &mut Criterion, variable_num: usize, code_rate: usize, termin
     for i in 1..variable_num {
         interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
     }
-    let oracle = RandomOracle::new(variable_num, 33);
+    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
     let prover = One2ManyProver::new(
         variable_num - terminate_round,
         &interpolate_cosets,
@@ -112,7 +113,7 @@ fn verify(
     for i in 1..variable_num {
         interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
     }
-    let oracle = RandomOracle::new(variable_num, 33);
+    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
     let mut prover = One2ManyProver::new(
         variable_num - terminate_round,
         &interpolate_cosets,

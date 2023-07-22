@@ -63,6 +63,22 @@ pub fn as_bytes_vec<T: Field>(s: &[T]) -> Vec<u8> {
     res
 }
 
+pub fn batch_inverse<T: Field>(v: &Vec<T>) -> Vec<T> {
+    let len = v.len();
+    let mut res = v.clone();
+    for i in 1..len {
+        let x = res[i - 1];
+        res[i] *= x;
+    }
+    let mut inv = res[len - 1].inverse();
+    for i in (1..len).rev() {
+        res[i] = inv * res[i - 1];
+        inv *= v[i]
+    }
+    res[0] = inv;
+    res
+}
+
 mod field_tests {
     use super::*;
 

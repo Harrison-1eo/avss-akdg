@@ -12,10 +12,11 @@ use util::algebra::coset::Coset;
 use util::algebra::field::mersenne61_ext::Mersenne61Ext;
 use util::split_n;
 
+const SECURITY_BITS: usize = 100;
 fn avss_deal(log_n: usize, code_rate: usize, terminate_round: usize) {
     let log_t = log_n - 2;
     let log_d = log_t * 2;
-    let oracle = RandomOracle::new(log_d - terminate_round, 33);
+    let oracle = RandomOracle::new(log_d - terminate_round, SECURITY_BITS / code_rate);
     let mut interpolate_cosets = vec![Coset::new(
         1 << (log_t * 2 + code_rate),
         Mersenne61Ext::random_element(),
@@ -87,7 +88,7 @@ fn bench_avss_deal(c: &mut Criterion) {
 fn avss_verify(criterion: &mut Criterion, log_n: usize, code_rate: usize, terminate_round: usize) {
     let log_t = log_n - 2;
     let log_d = log_t * 2;
-    let oracle = RandomOracle::new(log_d - terminate_round, 33);
+    let oracle = RandomOracle::new(log_d - terminate_round, SECURITY_BITS / code_rate);
     let mut interpolate_cosets = vec![Coset::new(
         1 << (log_t * 2 + code_rate),
         Mersenne61Ext::random_element(),
