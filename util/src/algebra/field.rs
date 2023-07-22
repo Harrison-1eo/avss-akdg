@@ -39,6 +39,7 @@ pub trait Field:
         res
     }
 
+    #[inline]
     fn pow(&self, mut n: usize) -> Self {
         let mut ret = Self::from_int(1);
         let mut base = self.clone();
@@ -53,6 +54,7 @@ pub trait Field:
     }
 }
 
+#[inline]
 pub fn as_bytes_vec<T: Field>(s: &[T]) -> Vec<u8> {
     let mut res = vec![];
     for i in s {

@@ -3,4 +3,5 @@ members = [
     "vss",
     "util",
     "pcs",
+    "avss",
 ]

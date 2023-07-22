@@ -128,14 +128,17 @@ impl Field for Mersenne61Ext {
         image: 0,
     };
 
+    #[inline]
     fn from_int(x: u64) -> Self {
         Mersenne61Ext { real: x, image: 0 }
     }
 
+    #[inline]
     fn is_zero(&self) -> bool {
         self.real == 0 && self.image == 0
     }
 
+    #[inline]
     fn random_element() -> Self {
         let mut rng = rand::thread_rng();
         Mersenne61Ext {
@@ -159,6 +162,7 @@ impl Field for Mersenne61Ext {
         ret
     }
 
+    #[inline]
     fn to_bytes(&self) -> Vec<u8> {
         let x = self.real.to_le_bytes().to_vec();
         x

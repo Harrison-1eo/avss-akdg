@@ -70,6 +70,7 @@ impl<T: Field> One2ManyProver<T> {
     ) -> One2ManyProver<T> {
         let interpolation = interpolate_coset[0].fft(polynomial.coefficients());
 
+        println!("{} {}", file!(), line!());
         One2ManyProver {
             total_round,
             variable_num: polynomial.variable_num(),

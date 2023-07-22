@@ -31,12 +31,14 @@ fn commit(
         b.iter_batched(
             || polynomial.clone(),
             |p| {
+                println!("{} {}", file!(), line!());
                 let prover = One2ManyProver::new(
                     variable_num - terminate_round,
                     &interpolate_cosets,
                     p,
                     &oracle,
                 );
+                println!("{} {}", file!(), line!());
                 prover.commit_polynomial();
             },
             BatchSize::SmallInput,
@@ -45,7 +47,7 @@ fn commit(
 }
 
 fn bench_commit(c: &mut Criterion) {
-    for i in 5..25 {
+    for i in 5..21 {
         commit(c, i, 4, if i < 9 { i - 4 } else { 5 });
     }
 }
@@ -91,7 +93,7 @@ fn open(criterion: &mut Criterion, variable_num: usize, code_rate: usize, termin
 }
 
 fn bench_open(c: &mut Criterion) {
-    for i in 5..25 {
+    for i in 5..21 {
         open(c, i, 4, if i < 9 { i - 4 } else { 5 });
     }
 }
@@ -139,7 +141,7 @@ fn verify(
 }
 
 fn bench_verify(c: &mut Criterion) {
-    for i in 5..25 {
+    for i in 5..21 {
         verify(c, i, 4, if i < 9 { i - 4 } else { 5 });
     }
 }

@@ -25,10 +25,10 @@ pub struct MerkleTreeVerifier {
 
 impl MerkleTreeProver {
     pub fn new(leaf_values: Vec<Vec<u8>>) -> Self {
-        let leaves: Vec<[u8; 32]> = leaf_values
+        let leaves = leaf_values
             .iter()
             .map(|x| Blake3Algorithm::hash(x))
-            .collect();
+            .collect::<Vec<_>>();
         let merkle_tree = MerkleTree::<Blake3Algorithm>::from_leaves(&leaves);
         Self {
             merkle_tree,

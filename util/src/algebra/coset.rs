@@ -7,22 +7,27 @@ struct Radix2Domain<T: Field> {
 }
 
 impl<T: Field> Radix2Domain<T> {
+    #[inline]
     pub fn new(order: usize, omega: T) -> Self {
         Radix2Domain { order, omega }
     }
 
+    #[inline]
     pub fn order(&self) -> usize {
         self.order
     }
 
+    #[inline]
     pub fn omega(&self) -> T {
         self.omega
     }
 
+    #[inline]
     pub fn fft(&self, a: &mut Vec<T>) {
         _fft(a, self.omega);
     }
 
+    #[inline]
     pub fn ifft(&self, a: &mut Vec<T>) {
         _fft(a, self.omega.inverse());
         let t = T::from_int(self.order as u64).inverse();
@@ -31,11 +36,13 @@ impl<T: Field> Radix2Domain<T> {
         }
     }
 
+    #[inline]
     pub fn coset_fft(&self, a: &mut Vec<T>, shift: T) {
         multiply_by_coset(a, shift);
         self.fft(a);
     }
 
+    #[inline]
     pub fn coset_ifft(&self, a: &mut Vec<T>, shift: T) {
         self.ifft(a);
         multiply_by_coset(a, shift.inverse());
@@ -50,22 +57,22 @@ fn multiply_by_coset<T: Field>(a: &mut Vec<T>, shift: T) {
     }
 }
 
-fn bitreverse(mut x: usize, len: usize) -> usize {
-    let mut r = 0;
-    for _i in 0..len {
-        r = (r << 1) | (x & 1);
-        x >>= 1;
+fn batch_bit_reverse(log_n: usize) -> Vec<usize> {
+    let n = 1 << log_n;
+    let mut res = (0..n).into_iter().map(|_| 0).collect::<Vec<usize>>();
+    for i in 0..n {
+        res[i] = (res[i >> 1] >> 1) | ((i & 1) << (log_n - 1));
     }
-    r
+    res
 }
 
 fn _fft<T: Field>(a: &mut Vec<T>, omega: T) {
     let n = a.len();
     let log_n = n.ilog2() as usize;
+    let rank = batch_bit_reverse(log_n);
     for i in 0..n {
-        let rank = bitreverse(i, log_n);
-        if i < rank {
-            (a[i], a[rank]) = (a[rank], a[i]);
+        if i < rank[i] {
+            (a[i], a[rank[i]]) = (a[rank[i]], a[i]);
         }
     }
     let mut log_m = 0usize;
