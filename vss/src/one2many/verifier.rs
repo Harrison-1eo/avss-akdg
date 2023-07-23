@@ -71,17 +71,13 @@ impl<T: Field> One2ManyVerifier<T> {
         self.final_value = Some(value.clone());
     }
 
-    fn verify_both_condition(
+    pub fn verify_with_extra_folding(
         &self,
-        folding_proofs: Vec<QueryResult<T>>,
-        function_proofs: Vec<QueryResult<T>>,
-        extra_folding_param: Option<&Vec<T>>,
-        extra_final_poly: Option<&MultilinearPolynomial<T>>,
+        folding_proofs: &Vec<QueryResult<T>>,
+        function_proofs: &Vec<QueryResult<T>>,
+        extra_folding_param: &Vec<T>,
+        extra_final_poly: &MultilinearPolynomial<T>,
     ) -> bool {
-        let has_extra = match extra_final_poly {
-            Some(_) => true,
-            None => false,
-        };
         let mut leaf_indices = self.oracle.query_list.clone();
         for i in 0..self.total_round {
             let domain_size = self.interpolate_cosets[i].size();
@@ -135,47 +131,37 @@ impl<T: Field> One2ManyVerifier<T> {
                         return false;
                     }
                 }
-                if has_extra {
                     let x = function_proofs[i].proof_values[j];
                     let nx = function_proofs[i].proof_values[&(j + domain_size / 2)];
                     let v = x
                         + nx
-                        + extra_folding_param.unwrap()[i]
+                        + extra_folding_param[i]
                             * (x - nx)
                             * self.interpolate_cosets[i].element_inv_at(*j);
                     if i < self.total_round - 1 {
                         assert_eq!(v, function_proofs[i + 1].proof_values[j] * T::from_int(2));
                     } else {
                         let x = self.interpolate_cosets[i + 1].element_at(*j);
-                        let poly_v = extra_final_poly.unwrap().evaluate_as_polynomial(x);
+                        let poly_v = extra_final_poly.evaluate_as_polynomial(x);
                         assert_eq!(v, poly_v * T::from_int(2));
                     }
-                }
             }
         }
         true
     }
 
-    pub fn verify_with_extra_folding(
-        &self,
-        folding_proofs: Vec<QueryResult<T>>,
-        function_proofs: Vec<QueryResult<T>>,
-        extra_folding_param: &Vec<T>,
-        extra_final_poly: &MultilinearPolynomial<T>,
-    ) -> bool {
-        self.verify_both_condition(
-            folding_proofs,
-            function_proofs,
-            Some(extra_folding_param),
-            Some(extra_final_poly),
-        )
-    }
-
-    pub fn verify(
-        &self,
-        folding_proofs: Vec<QueryResult<T>>,
-        function_proofs: Vec<QueryResult<T>>,
-    ) -> bool {
-        self.verify_both_condition(folding_proofs, function_proofs, None, None)
-    }
+    // pub fn verify_with_extra_folding(
+    //     &self,
+    //     folding_proofs: &Vec<QueryResult<T>>,
+    //     function_proofs: &Vec<QueryResult<T>>,
+    //     extra_folding_param: &Vec<T>,
+    //     extra_final_poly: &MultilinearPolynomial<T>,
+    // ) -> bool {
+    //     self.verify_both_condition(
+    //         folding_proofs,
+    //         function_proofs,
+    //         Some(extra_folding_param),
+    //         Some(extra_final_poly),
+    //     )
+    // }
 }

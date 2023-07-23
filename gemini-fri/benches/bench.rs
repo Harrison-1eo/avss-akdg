@@ -2,6 +2,7 @@ extern crate criterion;
 
 use criterion::*;
 
+use gemini_fri::{prover::FriProver, verifier::FriVerifier};
 use util::{
     algebra::{
         coset::Coset, field::mersenne61_ext::Mersenne61Ext, field::Field,
@@ -9,7 +10,6 @@ use util::{
     },
     random_oracle::RandomOracle,
 };
-use gemini_fri::{prover::FriProver, verifier::FriVerifier};
 
 const SECURITY_BITS: usize = 100;
 
@@ -29,7 +29,9 @@ fn commit(variable_num: usize, code_rate: usize) {
 
 fn bench_commit(c: &mut Criterion) {
     for i in 5..20 {
-        c.bench_function(&format!("bench gemini commit {}", i), |b| b.iter(|| commit(i, 4)));
+        c.bench_function(&format!("bench gemini commit {}", i), |b| {
+            b.iter(|| commit(i, 4))
+        });
     }
 }
 

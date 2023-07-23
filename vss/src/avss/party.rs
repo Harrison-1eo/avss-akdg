@@ -47,8 +47,8 @@ impl<T: Field + 'static> AvssParty<T> {
 
     pub fn verify(
         &self,
-        folding_proofs: Vec<QueryResult<T>>,
-        function_proofs: Vec<QueryResult<T>>,
+        folding_proofs: &Vec<QueryResult<T>>,
+        function_proofs: &Vec<QueryResult<T>>,
     ) -> bool {
         self.verifier.borrow().verify_with_extra_folding(
             folding_proofs,

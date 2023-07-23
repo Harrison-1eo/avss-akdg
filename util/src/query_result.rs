@@ -1,6 +1,7 @@
 use crate::algebra::field::{as_bytes_vec, Field};
 use crate::merkle_tree::MerkleTreeVerifier;
 use std::collections::HashMap;
+use std::mem::size_of;
 
 #[derive(Clone)]
 pub struct QueryResult<T: Field> {
@@ -29,5 +30,9 @@ impl<T: Field> QueryResult<T> {
         let res = merkle_verifier.verify(self.proof_bytes.clone(), leaf_indices, &leaves);
         assert!(res);
         res
+    }
+
+    pub fn proof_size(&self) -> usize {
+        self.proof_bytes.len() + self.proof_values.len() * size_of::<T>()
     }
 }

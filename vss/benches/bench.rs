@@ -115,7 +115,7 @@ fn vss_verify(c: &mut Criterion, log_n: usize, code_rate: usize, terminate_round
     group.sample_size(10);
     group.bench_function(format!("vss verify {}", log_n), move |b| {
         b.iter(|| {
-            parties[0].verify(folding0.clone(), function0.clone());
+            parties[0].verify(&folding0, &function0);
         })
     });
 }

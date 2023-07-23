@@ -32,14 +32,12 @@ fn commit(
         b.iter_batched(
             || polynomial.clone(),
             |p| {
-                println!("{} {}", file!(), line!());
                 let prover = One2ManyProver::new(
                     variable_num - terminate_round,
                     &interpolate_cosets,
                     p,
                     &oracle,
                 );
-                println!("{} {}", file!(), line!());
                 prover.commit_polynomial();
             },
             BatchSize::SmallInput,

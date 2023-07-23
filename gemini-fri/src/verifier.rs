@@ -1,5 +1,5 @@
-use util::query_result::QueryResult;
 use super::Tuple;
+use util::query_result::QueryResult;
 use util::random_oracle::RandomOracle;
 use util::{
     algebra::{coset::Coset, field::Field},
