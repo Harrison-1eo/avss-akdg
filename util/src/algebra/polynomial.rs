@@ -44,17 +44,35 @@ impl<T: Field> Polynomial<T> {
     }
 
     pub fn evaluation_over_coset(&self, coset: &Coset<T>) -> Vec<T> {
-        coset.fft(&self.coefficients)
+        coset.fft(self.coefficients.clone())
+    }
+
+    pub fn over_vanish_polynomial(
+        &self,
+        vanishing_polynomial: &VanishingPolynomial<T>,
+    ) -> Polynomial<T> {
+        let degree = vanishing_polynomial.degree;
+        let low_term = vanishing_polynomial.shift;
+        let mut coeff = vec![];
+        let mut remnant = self.coefficients.clone();
+        for i in (degree..self.coefficients.len()).rev() {
+            let tmp = remnant[i] * low_term;
+            coeff.push(remnant[i]);
+            remnant[i - degree] += tmp;
+        }
+        coeff.reverse();
+        Polynomial::new(coeff)
     }
 }
 
-struct VanishingPolynomial<T: Field> {
+#[derive(Debug, Clone)]
+pub struct VanishingPolynomial<T: Field> {
     degree: usize,
     shift: T,
 }
 
 impl<T: Field> VanishingPolynomial<T> {
-    fn new(coset: &Coset<T>) -> VanishingPolynomial<T> {
+    pub fn new(coset: &Coset<T>) -> VanishingPolynomial<T> {
         let degree = coset.size();
         VanishingPolynomial {
             degree,
@@ -62,9 +80,7 @@ impl<T: Field> VanishingPolynomial<T> {
         }
     }
 
-    // The n roots of the equation x^n - a^n = 0 are a*w_n^0, ..., a*w_n*{n-1}
-    // Thus, f(x) = (x - a*w_n^0)...(x - a*w_n^{n-1}) = x^n - a^n
-    fn evaluation_at(&self, x: T) -> T {
+    pub fn evaluation_at(&self, x: T) -> T {
         x.pow(self.degree) - self.shift
     }
 }

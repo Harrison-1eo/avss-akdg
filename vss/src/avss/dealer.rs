@@ -30,7 +30,7 @@ impl<T: Field + 'static> Dealer<T> {
         folding_parameter: &Vec<Vec<T>>,
         coset: &Vec<Coset<T>>,
     ) -> (Vec<Vec<Vec<T>>>, Vec<MultilinearPolynomial<T>>) {
-        let mut res = vec![vec![(coset[0].fft(polynomial.coefficients()))]];
+        let mut res = vec![vec![(coset[0].fft(polynomial.coefficients().clone()))]];
         let variable_num = polynomial.variable_num();
         let mut evaluations = vec![];
         for round in 0..total_round {
@@ -47,7 +47,7 @@ impl<T: Field + 'static> Dealer<T> {
                 for (index, j) in folding_parameter[round].iter().enumerate() {
                     let next_evaluation =
                         Self::fold(&res[round][index & (len - 1)], *j, &coset[round]);
-                    let mut coefficients = coset[round + 1].ifft(&next_evaluation);
+                    let mut coefficients = coset[round + 1].ifft(next_evaluation);
                     coefficients.truncate(1 << (variable_num - total_round));
                     evaluations.push(MultilinearPolynomial::new(coefficients));
                 }

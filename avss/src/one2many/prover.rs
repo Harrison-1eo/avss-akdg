@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use super::verifier::One2ManyVerifier;
 use util::algebra::polynomial::Polynomial;
 
+use util::merkle_tree::MERKLE_ROOT_SIZE;
 use util::query_result::QueryResult;
 use util::{
     algebra::{
@@ -33,7 +34,7 @@ impl<T: Field> InterpolateValue<T> {
         self.merkle_tree.leave_num()
     }
 
-    fn commit(&self) -> [u8; 32] {
+    fn commit(&self) -> [u8; MERKLE_ROOT_SIZE] {
         self.merkle_tree.commit()
     }
 
@@ -185,7 +186,7 @@ impl<T: Field> One2ManyProver<T> {
             } else {
                 for j in 0..self.functions[i].len() {
                     let next_evalutation = self.evaluation_next_domain(i, j, challenge);
-                    let coefficients = self.interpolate_cosets[i + 1].ifft(&next_evalutation);
+                    let coefficients = self.interpolate_cosets[i + 1].ifft(next_evalutation);
                     self.final_value.push(Polynomial::new(coefficients));
                 }
             }

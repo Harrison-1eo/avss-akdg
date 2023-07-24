@@ -1,6 +1,7 @@
 use super::verifier::One2ManyVerifier;
 use util::algebra::polynomial::{MultilinearPolynomial, Polynomial};
 
+use util::merkle_tree::MERKLE_ROOT_SIZE;
 use util::query_result::QueryResult;
 use util::{
     algebra::{
@@ -32,7 +33,7 @@ impl<T: Field> InterpolateValue<T> {
         self.merkle_tree.leave_num()
     }
 
-    fn commit(&self) -> [u8; 32] {
+    fn commit(&self) -> [u8; MERKLE_ROOT_SIZE] {
         self.merkle_tree.commit()
     }
 
@@ -68,7 +69,7 @@ impl<T: Field> One2ManyProver<T> {
         polynomial: MultilinearPolynomial<T>,
         oracle: &RandomOracle<T>,
     ) -> One2ManyProver<T> {
-        let interpolation = interpolate_coset[0].fft(polynomial.coefficients());
+        let interpolation = interpolate_coset[0].fft(polynomial.coefficients().clone());
 
         One2ManyProver {
             total_round,
@@ -81,7 +82,7 @@ impl<T: Field> One2ManyProver<T> {
         }
     }
 
-    pub fn commit_polynomial(&self) -> [u8; 32] {
+    pub fn commit_polynomial(&self) -> [u8; MERKLE_ROOT_SIZE] {
         assert_eq!(self.functions.len(), 1);
         self.functions[0].commit()
     }
@@ -111,7 +112,7 @@ impl<T: Field> One2ManyProver<T> {
             if round < self.total_round - 1 {
                 self.functions.push(InterpolateValue::new(next_evaluation));
             } else {
-                let mut coefficients = self.interpolate_cosets[round + 1].ifft(&next_evaluation);
+                let mut coefficients = self.interpolate_cosets[round + 1].ifft(next_evaluation);
                 coefficients.truncate(1 << (self.variable_num - self.total_round));
                 evaluation = Some(MultilinearPolynomial::new(coefficients));
             }
@@ -166,7 +167,7 @@ impl<T: Field> One2ManyProver<T> {
                 self.foldings.push(InterpolateValue::new(next_evalutation));
             } else {
                 let next_evalutation = self.evaluation_next_domain(i, challenge);
-                let coefficients = self.interpolate_cosets[i + 1].ifft(&next_evalutation);
+                let coefficients = self.interpolate_cosets[i + 1].ifft(next_evalutation);
                 self.final_value = Some(Polynomial::new(coefficients));
             }
         }

@@ -4,13 +4,14 @@ use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 pub struct Blake3Algorithm {}
 
 impl Hasher for Blake3Algorithm {
-    type Hash = [u8; 32];
+    type Hash = [u8; MERKLE_ROOT_SIZE];
 
-    fn hash(data: &[u8]) -> [u8; 32] {
+    fn hash(data: &[u8]) -> [u8; MERKLE_ROOT_SIZE] {
         blake3::hash(data).into()
     }
 }
 
+pub const MERKLE_ROOT_SIZE: usize = 32;
 #[derive(Clone)]
 pub struct MerkleTreeProver {
     pub merkle_tree: MerkleTree<Blake3Algorithm>,
@@ -19,7 +20,7 @@ pub struct MerkleTreeProver {
 
 #[derive(Debug, Clone)]
 pub struct MerkleTreeVerifier {
-    pub merkle_root: [u8; 32],
+    pub merkle_root: [u8; MERKLE_ROOT_SIZE],
     pub leave_number: usize,
 }
 
@@ -40,7 +41,7 @@ impl MerkleTreeProver {
         self.leave_num
     }
 
-    pub fn commit(&self) -> [u8; 32] {
+    pub fn commit(&self) -> [u8; MERKLE_ROOT_SIZE] {
         self.merkle_tree.root().unwrap()
     }
 
@@ -50,7 +51,7 @@ impl MerkleTreeProver {
 }
 
 impl MerkleTreeVerifier {
-    pub fn new(leave_number: usize, merkle_root: &[u8; 32]) -> Self {
+    pub fn new(leave_number: usize, merkle_root: &[u8; MERKLE_ROOT_SIZE]) -> Self {
         Self {
             leave_number,
             merkle_root: merkle_root.clone(),
@@ -64,7 +65,7 @@ impl MerkleTreeVerifier {
         leaves: &Vec<Vec<u8>>,
     ) -> bool {
         let proof = MerkleProof::<Blake3Algorithm>::try_from(proof_bytes).unwrap();
-        let leaves_to_prove: Vec<[u8; 32]> =
+        let leaves_to_prove: Vec<[u8; MERKLE_ROOT_SIZE]> =
             leaves.iter().map(|x| Blake3Algorithm::hash(x)).collect();
         proof.verify(
             self.merkle_root,

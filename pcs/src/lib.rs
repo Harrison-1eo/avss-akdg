@@ -3,6 +3,8 @@ pub mod verifier;
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of;
+
     use crate::{prover::One2ManyProver, verifier::One2ManyVerifier};
     use util::{
         algebra::{
@@ -10,6 +12,7 @@ mod tests {
             field::{mersenne61_ext::Mersenne61Ext, Field},
             polynomial::MultilinearPolynomial,
         },
+        merkle_tree::MERKLE_ROOT_SIZE,
         random_oracle::RandomOracle,
     };
 
@@ -48,6 +51,8 @@ mod tests {
         verifier.verify(&folding_proof, &function_proof);
         folding_proof.iter().map(|x| x.proof_size()).sum::<usize>()
             + function_proof.iter().map(|x| x.proof_size()).sum::<usize>()
+            + (variable_num - terminate_round) * MERKLE_ROOT_SIZE * 2
+            + ((1 << terminate_round) + 1) * size_of::<Mersenne61Ext>() * 2
     }
 
     #[test]

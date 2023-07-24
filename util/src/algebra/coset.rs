@@ -1,4 +1,4 @@
-use super::field::Field;
+use super::{field::Field, polynomial::Polynomial};
 
 #[derive(Debug, Clone, Copy)]
 struct Radix2Domain<T: Field> {
@@ -103,6 +103,32 @@ pub struct Coset<T: Field> {
 }
 
 impl<T: Field> Coset<T> {
+    pub fn mult(poly1: &Polynomial<T>, poly2: &Polynomial<T>) -> Polynomial<T> {
+        let degree = {
+            let max_d = std::cmp::max(poly1.degree(), poly2.degree()) + 1;
+            let mut d = 1;
+            while d < max_d {
+                d <<= 1;
+            }
+            d << 1
+        };
+        let domain = Radix2Domain::new(degree, T::get_generator(degree));
+        let mut coeff1 = poly1.coefficients().clone();
+        let len = coeff1.len();
+        coeff1.append(&mut (len..degree).into_iter().map(|_| T::from_int(0)).collect());
+        let mut coeff2 = poly2.coefficients().clone();
+        let len = coeff2.len();
+        coeff2.append(&mut (len..degree).into_iter().map(|_| T::from_int(0)).collect());
+        domain.fft(&mut coeff1);
+        domain.fft(&mut coeff2);
+        for i in 0..degree {
+            coeff1[i] *= coeff2[i];
+        }
+        domain.ifft(&mut coeff1);
+        let poly = Polynomial::new(coeff1);
+        poly
+    }
+
     pub fn new(order: usize, shift: T) -> Self {
         assert!(!shift.is_zero());
         let omega = T::get_generator(order);
@@ -192,23 +218,22 @@ impl<T: Field> Coset<T> {
         self.fft_eval_domain.order()
     }
 
-    pub fn fft(&self, coeff: &Vec<T>) -> Vec<T> {
-        let mut a = coeff.clone();
-        let n = self.size() - a.len();
+    pub fn fft(&self, mut coeff: Vec<T>) -> Vec<T> {
+        let n = self.size() - coeff.len();
         for _i in 0..n {
-            a.push(T::from_int(0));
+            coeff.push(T::from_int(0));
         }
-        self.fft_eval_domain.coset_fft(&mut a, self.shift);
-        a
+        self.fft_eval_domain.coset_fft(&mut coeff, self.shift);
+        coeff
     }
 
-    pub fn ifft(&self, evals: &Vec<T>) -> Vec<T> {
+    pub fn ifft(&self, mut evals: Vec<T>) -> Vec<T> {
         if evals.len() == 1 {
             return vec![evals[0]];
         };
-        let mut a = evals.clone();
-        self.fft_eval_domain.coset_ifft(&mut a, self.shift);
-        a
+        assert_eq!(self.size(), evals.len());
+        self.fft_eval_domain.coset_ifft(&mut evals, self.shift);
+        evals
     }
 
     pub fn shift(&self) -> T {
@@ -232,6 +257,7 @@ mod tests {
             a.push(Fp64::random_element());
             b.push(Fp64::random_element());
         }
+        let fft_a_times_b = Coset::mult(&Polynomial::new(a.clone()), &Polynomial::new(b.clone()));
         for _i in 16..32 {
             a.push(Fp64::from_int(0));
             b.push(Fp64::from_int(0));
@@ -245,18 +271,14 @@ mod tests {
                 a_times_b[i + j] += a[i] * b[j];
             }
         }
-        let domain: Radix2Domain<Fp64> = Radix2Domain::new(32, Fp64::get_generator(32));
-        domain.fft(&mut a);
-        domain.fft(&mut b);
-        for i in 0..a.len() {
-            a[i] *= b[i];
+        while a_times_b.last().unwrap().is_zero() {
+            a_times_b.pop();
         }
-        domain.ifft(&mut a);
-        assert_eq!(&a, &a_times_b);
-        let shift = Fp64::random_element();
-        domain.coset_fft(&mut a, shift);
-        domain.coset_ifft(&mut a, shift);
-        assert_eq!(&a, &a_times_b);
+        assert_eq!(fft_a_times_b.coefficients().clone(), a_times_b);
+        let coset = Coset::new(32, Fp64::random_element());
+        let b = coset.fft(a.clone());
+        let c = coset.ifft(b);
+        assert_eq!(a, c);
     }
 
     #[test]

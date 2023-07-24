@@ -4,5 +4,6 @@ members = [
     "util",
     "pcs",
     "avss",
-    "gemini-fri"
+    "gemini-fri",
+    "virgo",
 ]

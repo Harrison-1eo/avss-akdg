@@ -11,9 +11,10 @@ pub mod avss {
 mod tests {
     use crate::avss::dealer::Dealer;
     use crate::avss::party::AvssParty;
+    use std::mem::size_of;
     use util::algebra::field::Field;
     use util::algebra::polynomial::MultilinearPolynomial;
-    use util::random_oracle::RandomOracle;
+    use util::{merkle_tree::MERKLE_ROOT_SIZE, random_oracle::RandomOracle};
 
     use util::algebra::coset::Coset;
     use util::algebra::field::mersenne61_ext::Mersenne61Ext;
@@ -76,16 +77,15 @@ mod tests {
         assert!(parties[0].verify(&folding0, &function0));
         folding0.iter().map(|x| x.proof_size()).sum::<usize>()
             + function0.iter().map(|x| x.proof_size()).sum::<usize>()
+            + (log_t - terminate_round) * MERKLE_ROOT_SIZE * 2
+            + ((1 << terminate_round) + 1) * size_of::<Mersenne61Ext>() * 2
     }
 
     #[test]
     fn test_proof_size() {
         for i in 5..21 {
             let proof_size = output_proof_size(i, 4, if i < 9 { i - 4 } else { 5 });
-            println!(
-                "vss proof size of {} variables is {} bytes",
-                i, proof_size
-            );
+            println!("vss proof size of {} variables is {} bytes", i, proof_size);
         }
     }
 }

@@ -1,4 +1,6 @@
-use super::Tuple;
+use std::collections::HashMap;
+
+use util::algebra::polynomial::VanishingPolynomial;
 use util::merkle_tree::MERKLE_ROOT_SIZE;
 use util::query_result::QueryResult;
 use util::random_oracle::RandomOracle;
@@ -11,10 +13,14 @@ use util::{
 pub struct FriVerifier<T: Field> {
     total_round: usize,
     interpolate_cosets: Vec<Coset<T>>,
-    function_root: Vec<(MerkleTreeVerifier, Vec<(T, T)>)>,
+    vector_interpolation_coset: Coset<T>,
+    u_root: MerkleTreeVerifier,
+    h_root: Option<MerkleTreeVerifier>,
     folding_root: Vec<MerkleTreeVerifier>,
     oracle: RandomOracle<T>,
+    vanishing_polynomial: VanishingPolynomial<T>,
     final_value: Option<T>,
+    evaluation: Option<T>,
     open_point: Option<Vec<T>>,
 }
 
@@ -22,24 +28,30 @@ impl<T: Field> FriVerifier<T> {
     pub fn new(
         total_round: usize,
         coset: &Vec<Coset<T>>,
+        vector_interpolation_coset: &Coset<T>,
         polynomial_commitment: [u8; MERKLE_ROOT_SIZE],
         oracle: &RandomOracle<T>,
     ) -> Self {
         FriVerifier {
             total_round,
             interpolate_cosets: coset.clone(),
-            function_root: vec![(
-                MerkleTreeVerifier {
-                    leave_number: coset[0].size() / 2,
-                    merkle_root: polynomial_commitment,
-                },
-                vec![],
-            )],
+            vector_interpolation_coset: vector_interpolation_coset.clone(),
+            u_root: MerkleTreeVerifier {
+                leave_number: coset[0].size() / 2,
+                merkle_root: polynomial_commitment,
+            },
+            h_root: None,
             folding_root: vec![],
             oracle: oracle.clone(),
+            vanishing_polynomial: VanishingPolynomial::new(vector_interpolation_coset),
             final_value: None,
             open_point: None,
+            evaluation: None,
         }
+    }
+
+    pub fn set_evaluation(&mut self, v: T) {
+        self.evaluation = Some(v);
     }
 
     pub fn get_open_point(&mut self) -> Vec<T> {
@@ -50,26 +62,11 @@ impl<T: Field> FriVerifier<T> {
         point
     }
 
-    pub fn append_function(&mut self, function_root: [u8; MERKLE_ROOT_SIZE]) {
-        self.function_root.push((
-            MerkleTreeVerifier {
-                merkle_root: function_root,
-                leave_number: self.interpolate_cosets[0].size() / 2,
-            },
-            vec![],
-        ));
-    }
-
-    pub fn set_tuples(&mut self, tuples: &Vec<Tuple<T>>) {
-        let beta = self.oracle.beta;
-        for i in 0..tuples.len() {
-            assert!(tuples[i].verify(beta, self.open_point.as_ref().unwrap()[i]));
-            self.function_root[i].1.push((beta, tuples[i].a));
-            self.function_root[i].1.push((-beta, tuples[i].b));
-            if i < tuples.len() - 1 {
-                self.function_root[i + 1].1.push((beta * beta, tuples[i].c))
-            }
-        }
+    pub fn set_h_root(&mut self, h_root: [u8; MERKLE_ROOT_SIZE]) {
+        self.h_root = Some(MerkleTreeVerifier {
+            merkle_root: h_root,
+            leave_number: self.interpolate_cosets[0].size() / 2,
+        });
     }
 
     pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; MERKLE_ROOT_SIZE]) {
@@ -87,10 +84,12 @@ impl<T: Field> FriVerifier<T> {
     pub fn verify(
         &self,
         folding_proofs: &Vec<QueryResult<T>>,
+        v_values: &HashMap<usize, T>,
         function_proofs: &Vec<QueryResult<T>>,
     ) -> bool {
         let mut leaf_indices = self.oracle.query_list.clone();
         let rlc = self.oracle.rlc;
+        let h_size = T::from_int(self.vector_interpolation_coset.size() as u64);
         for i in 0..self.total_round {
             let domain_size = self.interpolate_cosets[i].size();
             leaf_indices = leaf_indices
@@ -101,10 +100,9 @@ impl<T: Field> FriVerifier<T> {
             leaf_indices.dedup();
 
             if i == 0 {
-                for j in 0..function_proofs.len() {
-                    assert!(function_proofs[j]
-                        .verify_merkle_tree(&leaf_indices, &self.function_root[j].0));
-                }
+                assert!(function_proofs[0].verify_merkle_tree(&leaf_indices, &self.u_root));
+                assert!(function_proofs[1]
+                    .verify_merkle_tree(&leaf_indices, &self.h_root.as_ref().unwrap()));
             } else {
                 folding_proofs[i - 1].verify_merkle_tree(&leaf_indices, &self.folding_root[i - 1]);
             }
@@ -112,19 +110,21 @@ impl<T: Field> FriVerifier<T> {
             let challenge = self.oracle.folding_challenges[i];
             let get_folding_value = |index: &usize| {
                 if i == 0 {
-                    let mut tmp_rlc = T::from_int(1);
-                    let mut res = T::from_int(0); //function_proofs[0].proof_values[index];
-                    for f in 0..self.function_root.len() {
-                        let this_v = function_proofs[f].proof_values[index];
-                        res += this_v * tmp_rlc;
-                        tmp_rlc *= rlc;
-                        for (x, y) in &self.function_root[f].1 {
-                            res += tmp_rlc
-                                * (this_v - *y)
-                                * (self.interpolate_cosets[0].element_at(*index) - *x).inverse();
-                            tmp_rlc *= rlc
-                        }
-                    }
+                    let u = function_proofs[0].proof_values[index];
+                    let h = function_proofs[1].proof_values[index];
+                    let v = v_values[index];
+                    let x = self.interpolate_cosets[i].element_at(*index);
+                    let x_inv = self.interpolate_cosets[i].element_inv_at(*index);
+
+                    let mut res = u;
+                    let mut acc = rlc;
+                    res += h * acc;
+                    acc *= rlc;
+                    res += acc
+                        * (u * v * h_size
+                            - self.vanishing_polynomial.evaluation_at(x) * h * h_size
+                            - self.evaluation.unwrap())
+                        * x_inv;
                     res
                 } else {
                     folding_proofs[i - 1].proof_values[index]
@@ -138,10 +138,12 @@ impl<T: Field> FriVerifier<T> {
                     x + nx + challenge * (x - nx) * self.interpolate_cosets[i].element_inv_at(*j);
                 if i < self.total_round - 1 {
                     if v != folding_proofs[i].proof_values[j] {
+                        panic!("{}", i);
                         return false;
                     }
                 } else {
                     if v != self.final_value.unwrap() {
+                        panic!();
                         return false;
                     }
                 }

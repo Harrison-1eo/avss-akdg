@@ -1,4 +1,5 @@
 use util::algebra::polynomial::{MultilinearPolynomial, Polynomial};
+use util::merkle_tree::MERKLE_ROOT_SIZE;
 use util::random_oracle::RandomOracle;
 use util::{
     algebra::{coset::Coset, field::Field},
@@ -52,14 +53,14 @@ impl<T: Field> One2ManyVerifier<T> {
         }
     }
 
-    pub fn set_function(&mut self, leave_number: usize, function_root: &[u8; 32]) {
+    pub fn set_function(&mut self, leave_number: usize, function_root: &[u8; MERKLE_ROOT_SIZE]) {
         self.function_root.push(MerkleTreeVerifier {
             merkle_root: function_root.clone(),
             leave_number,
         });
     }
 
-    pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; 32]) {
+    pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; MERKLE_ROOT_SIZE]) {
         self.folding_root.push(MerkleTreeVerifier {
             leave_number,
             merkle_root: folding_root,
@@ -131,20 +132,20 @@ impl<T: Field> One2ManyVerifier<T> {
                         return false;
                     }
                 }
-                    let x = function_proofs[i].proof_values[j];
-                    let nx = function_proofs[i].proof_values[&(j + domain_size / 2)];
-                    let v = x
-                        + nx
-                        + extra_folding_param[i]
-                            * (x - nx)
-                            * self.interpolate_cosets[i].element_inv_at(*j);
-                    if i < self.total_round - 1 {
-                        assert_eq!(v, function_proofs[i + 1].proof_values[j] * T::from_int(2));
-                    } else {
-                        let x = self.interpolate_cosets[i + 1].element_at(*j);
-                        let poly_v = extra_final_poly.evaluate_as_polynomial(x);
-                        assert_eq!(v, poly_v * T::from_int(2));
-                    }
+                let x = function_proofs[i].proof_values[j];
+                let nx = function_proofs[i].proof_values[&(j + domain_size / 2)];
+                let v = x
+                    + nx
+                    + extra_folding_param[i]
+                        * (x - nx)
+                        * self.interpolate_cosets[i].element_inv_at(*j);
+                if i < self.total_round - 1 {
+                    assert_eq!(v, function_proofs[i + 1].proof_values[j] * T::from_int(2));
+                } else {
+                    let x = self.interpolate_cosets[i + 1].element_at(*j);
+                    let poly_v = extra_final_poly.evaluate_as_polynomial(x);
+                    assert_eq!(v, poly_v * T::from_int(2));
+                }
             }
         }
         true

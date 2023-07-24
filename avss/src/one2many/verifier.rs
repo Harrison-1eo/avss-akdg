@@ -1,4 +1,5 @@
 use util::algebra::polynomial::{MultilinearPolynomial, Polynomial};
+use util::merkle_tree::MERKLE_ROOT_SIZE;
 use util::random_oracle::RandomOracle;
 use util::{
     algebra::{coset::Coset, field::Field},
@@ -52,14 +53,14 @@ impl<T: Field> One2ManyVerifier<T> {
         }
     }
 
-    pub fn set_function(&mut self, leave_number: usize, function_root: &[u8; 32]) {
+    pub fn set_function(&mut self, leave_number: usize, function_root: &[u8; MERKLE_ROOT_SIZE]) {
         self.function_root.push(MerkleTreeVerifier {
             merkle_root: function_root.clone(),
             leave_number,
         });
     }
 
-    pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; 32]) {
+    pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; MERKLE_ROOT_SIZE]) {
         self.folding_root.push(MerkleTreeVerifier {
             leave_number,
             merkle_root: folding_root,

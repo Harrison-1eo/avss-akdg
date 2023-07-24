@@ -27,6 +27,7 @@ mod tests {
             coset::Coset, field::mersenne61_ext::Mersenne61Ext, field::Field,
             polynomial::MultilinearPolynomial,
         },
+        merkle_tree::MERKLE_ROOT_SIZE,
         random_oracle::RandomOracle,
     };
 
@@ -54,6 +55,8 @@ mod tests {
         verifier.set_tuples(&tuples);
         assert!(verifier.verify(&folding_proofs, &function_proofs));
         tuples.len() * size_of::<Tuple<Mersenne61Ext>>()
+            + variable_num * MERKLE_ROOT_SIZE * 2
+            + 2 * size_of::<Mersenne61Ext>()
             + folding_proofs.iter().map(|x| x.proof_size()).sum::<usize>()
             + function_proofs
                 .iter()
