@@ -76,7 +76,7 @@ fn avss_deal(log_n: usize, code_rate: usize, terminate_round: usize) {
 
 fn bench_avss_deal(c: &mut Criterion) {
     for i in 3..11 {
-        let terminate_round = if i < 5 { i * 2 - 5 } else { 5 };
+        let terminate_round = 1;
         c.bench_function(&format!("avss prove {}", i), move |b| {
             b.iter(|| {
                 avss_deal(i, 4, terminate_round);
@@ -161,7 +161,7 @@ fn avss_verify(criterion: &mut Criterion, log_n: usize, code_rate: usize, termin
 
 fn bench_avss_verify(c: &mut Criterion) {
     for i in 3..11 {
-        let terminate_round = if i < 5 { i * 2 - 5 } else { 5 };
+        let terminate_round = 1;
         avss_verify(c, i, 4, terminate_round);
     }
 }
