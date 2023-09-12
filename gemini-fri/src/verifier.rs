@@ -72,7 +72,11 @@ impl<T: Field> FriVerifier<T> {
         }
     }
 
-    pub fn receive_folding_root(&mut self, leave_number: usize, folding_root: [u8; MERKLE_ROOT_SIZE]) {
+    pub fn receive_folding_root(
+        &mut self,
+        leave_number: usize,
+        folding_root: [u8; MERKLE_ROOT_SIZE],
+    ) {
         self.folding_root.push(MerkleTreeVerifier {
             leave_number,
             merkle_root: folding_root,

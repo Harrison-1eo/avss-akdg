@@ -1,7 +1,8 @@
 use super::verifier::FriVerifier;
 use util::{
     algebra::{field, polynomial::MultilinearPolynomial},
-    random_oracle::RandomOracle, merkle_tree::MERKLE_ROOT_SIZE,
+    merkle_tree::MERKLE_ROOT_SIZE,
+    random_oracle::RandomOracle,
 };
 
 use util::query_result::QueryResult;

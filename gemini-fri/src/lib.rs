@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn test_proof_size() {
         for i in 5..20 {
-            let proof_size = output_proof_size(i, 4);
+            let proof_size = output_proof_size(i, 3);
             println!(
                 "gemini proof size of {} variables is {} bytes",
                 i, proof_size

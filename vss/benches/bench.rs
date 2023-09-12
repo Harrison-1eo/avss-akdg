@@ -122,7 +122,7 @@ fn vss_verify(c: &mut Criterion, log_n: usize, code_rate: usize, terminate_round
 
 fn bench_vss_deal(c: &mut Criterion) {
     for i in 5..21 {
-        let terminate_round = if i < 9 { i - 4 } else { 5 };
+        let terminate_round = 1;
         c.bench_function(&format!("vss prove {}", i), move |b| {
             b.iter(|| {
                 vss_deal(i, 3, terminate_round);
@@ -133,7 +133,7 @@ fn bench_vss_deal(c: &mut Criterion) {
 
 fn bench_vss_verify(c: &mut Criterion) {
     for i in 5..21 {
-        let terminate_round = if i < 9 { i - 4 } else { 5 };
+        let terminate_round = 1;
         vss_verify(c, i, 3, terminate_round);
     }
 }

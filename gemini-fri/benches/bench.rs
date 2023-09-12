@@ -30,7 +30,7 @@ fn commit(variable_num: usize, code_rate: usize) {
 fn bench_commit(c: &mut Criterion) {
     for i in 5..20 {
         c.bench_function(&format!("bench gemini commit {}", i), |b| {
-            b.iter(|| commit(i, 4))
+            b.iter(|| commit(i, 3))
         });
     }
 }
@@ -66,7 +66,7 @@ fn open(criterion: &mut Criterion, variable_num: usize, code_rate: usize) {
 
 fn bench_open(c: &mut Criterion) {
     for i in 5..20 {
-        open(c, i, 4);
+        open(c, i, 3);
     }
 }
 
@@ -103,7 +103,7 @@ fn verify(criterion: &mut Criterion, variable_num: usize, code_rate: usize) {
 
 fn bench_verify(c: &mut Criterion) {
     for i in 5..20 {
-        verify(c, i, 4);
+        verify(c, i, 3);
     }
 }
 

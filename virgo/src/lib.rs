@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn test_virgo_proof_size() {
         for i in 5..21 {
-            let proof_size = output_proof_size(i, 4);
+            let proof_size = output_proof_size(i, 3);
             println!(
                 "virgo pcs proof size of {} variables is {} bytes",
                 i, proof_size
