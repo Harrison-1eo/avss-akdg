@@ -6,7 +6,7 @@ def randomword(length):
    return ''.join(random.choice(letters) for i in range(length))
 
 tmp_file = randomword(20) + '.txt'
-for i in range(5, 15):
+for i in range(5, 20):
     print('bench fft_gkr of size', i)
     round = 10
     prover_time = 0
