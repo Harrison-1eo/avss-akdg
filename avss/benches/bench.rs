@@ -11,14 +11,14 @@ use util::random_oracle::RandomOracle;
 use util::algebra::coset::Coset;
 use util::algebra::field::mersenne61_ext::Mersenne61Ext;
 use util::split_n;
+use util::{CODE_RATE, SECURITY_BITS};
 
-const SECURITY_BITS: usize = 100;
-fn avss_deal(log_n: usize, code_rate: usize, terminate_round: usize) {
+fn avss_deal(log_n: usize, terminate_round: usize) {
     let log_t = log_n - 2;
     let log_d = log_t * 2;
-    let oracle = RandomOracle::new(log_d - terminate_round, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(log_d - terminate_round, SECURITY_BITS / CODE_RATE);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (log_t * 2 + code_rate),
+        1 << (log_t * 2 + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..log_d {
@@ -79,18 +79,18 @@ fn bench_avss_deal(c: &mut Criterion) {
         let terminate_round = 1;
         c.bench_function(&format!("avss prove {}", i), move |b| {
             b.iter(|| {
-                avss_deal(i, 3, terminate_round);
+                avss_deal(i, terminate_round);
             })
         });
     }
 }
 
-fn avss_verify(criterion: &mut Criterion, log_n: usize, code_rate: usize, terminate_round: usize) {
+fn avss_verify(criterion: &mut Criterion, log_n: usize, terminate_round: usize) {
     let log_t = log_n - 2;
     let log_d = log_t * 2;
-    let oracle = RandomOracle::new(log_d - terminate_round, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(log_d - terminate_round, SECURITY_BITS / CODE_RATE);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (log_t * 2 + code_rate),
+        1 << (log_t * 2 + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..log_d {
@@ -162,7 +162,7 @@ fn avss_verify(criterion: &mut Criterion, log_n: usize, code_rate: usize, termin
 fn bench_avss_verify(c: &mut Criterion) {
     for i in 5..12 {
         let terminate_round = 1;
-        avss_verify(c, i, 3, terminate_round);
+        avss_verify(c, i, terminate_round);
     }
 }
 

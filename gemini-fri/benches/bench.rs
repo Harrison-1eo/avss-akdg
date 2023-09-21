@@ -11,18 +11,18 @@ use util::{
     random_oracle::RandomOracle,
 };
 
-const SECURITY_BITS: usize = 100;
+use util::{CODE_RATE, SECURITY_BITS};
 
-fn commit(variable_num: usize, code_rate: usize) {
+fn commit(variable_num: usize) {
     let polynomial = MultilinearPolynomial::random_polynomial(variable_num);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (variable_num + code_rate),
+        1 << (variable_num + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..variable_num {
         interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
     }
-    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / CODE_RATE);
     let prover = FriProver::new(variable_num, &interpolate_cosets, polynomial, &oracle);
     prover.commit_first_polynomial();
 }
@@ -30,21 +30,21 @@ fn commit(variable_num: usize, code_rate: usize) {
 fn bench_commit(c: &mut Criterion) {
     for i in 5..20 {
         c.bench_function(&format!("bench gemini commit {}", i), |b| {
-            b.iter(|| commit(i, 3))
+            b.iter(|| commit(i))
         });
     }
 }
 
-fn open(criterion: &mut Criterion, variable_num: usize, code_rate: usize) {
+fn open(criterion: &mut Criterion, variable_num: usize) {
     let polynomial = MultilinearPolynomial::random_polynomial(variable_num);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (variable_num + code_rate),
+        1 << (variable_num + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..variable_num {
         interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
     }
-    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / CODE_RATE);
     let prover = FriProver::new(variable_num, &interpolate_cosets, polynomial, &oracle);
     let commitment = prover.commit_first_polynomial();
     let mut verifier = FriVerifier::new(variable_num, &interpolate_cosets, commitment, &oracle);
@@ -66,20 +66,20 @@ fn open(criterion: &mut Criterion, variable_num: usize, code_rate: usize) {
 
 fn bench_open(c: &mut Criterion) {
     for i in 5..20 {
-        open(c, i, 3);
+        open(c, i);
     }
 }
 
-fn verify(criterion: &mut Criterion, variable_num: usize, code_rate: usize) {
+fn verify(criterion: &mut Criterion, variable_num: usize) {
     let polynomial = MultilinearPolynomial::random_polynomial(variable_num);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (variable_num + code_rate),
+        1 << (variable_num + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..variable_num {
         interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
     }
-    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(variable_num, SECURITY_BITS / CODE_RATE);
     let mut prover = FriProver::new(variable_num, &interpolate_cosets, polynomial, &oracle);
     let commitment = prover.commit_first_polynomial();
     let mut verifier = FriVerifier::new(variable_num, &interpolate_cosets, commitment, &oracle);
@@ -103,7 +103,7 @@ fn verify(criterion: &mut Criterion, variable_num: usize, code_rate: usize) {
 
 fn bench_verify(c: &mut Criterion) {
     for i in 5..20 {
-        verify(c, i, 3);
+        verify(c, i);
     }
 }
 

@@ -15,19 +15,18 @@ mod tests {
         merkle_tree::MERKLE_ROOT_SIZE,
         random_oracle::RandomOracle,
     };
+    use util::{CODE_RATE, SECURITY_BITS};
 
-    const SECURITY_BITS: usize = 100;
-
-    fn output_proof_size(variable_num: usize, code_rate: usize, terminate_round: usize) -> usize {
+    fn output_proof_size(variable_num: usize, terminate_round: usize) -> usize {
         let polynomial = MultilinearPolynomial::random_polynomial(variable_num);
         let mut interpolate_cosets = vec![Coset::new(
-            1 << (variable_num + code_rate),
+            1 << (variable_num + CODE_RATE),
             Mersenne61Ext::random_element(),
         )];
         for i in 1..variable_num {
             interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
         }
-        let oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
+        let oracle = RandomOracle::new(variable_num, SECURITY_BITS / CODE_RATE);
         let mut prover = One2ManyProver::new(
             variable_num - terminate_round,
             &interpolate_cosets,
@@ -58,7 +57,7 @@ mod tests {
     #[test]
     fn test_proof_size() {
         for i in 5..21 {
-            let proof_size = output_proof_size(i, 4, if i < 9 { i - 4 } else { 5 });
+            let proof_size = output_proof_size(i, 1);
             println!(
                 "frolling pcs proof size of {} variables is {} bytes",
                 i, proof_size

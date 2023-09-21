@@ -14,17 +14,17 @@ mod tests {
         random_oracle::RandomOracle,
     };
 
-    const SECURITY_BITS: usize = 100;
-    fn output_proof_size(variable_num: usize, code_rate: usize) -> usize {
+    use util::{CODE_RATE, SECURITY_BITS};
+    fn output_proof_size(variable_num: usize) -> usize {
         let polynomial = MultilinearPolynomial::random_polynomial(variable_num);
         let mut interpolate_cosets = vec![Coset::new(
-            1 << (variable_num + code_rate),
+            1 << (variable_num + CODE_RATE),
             Mersenne61Ext::random_element(),
         )];
         for i in 1..variable_num {
             interpolate_cosets.push(interpolate_cosets[i - 1].pow(2));
         }
-        let random_oracle = RandomOracle::new(variable_num, SECURITY_BITS / code_rate);
+        let random_oracle = RandomOracle::new(variable_num, SECURITY_BITS / CODE_RATE);
         let vector_interpolation_coset =
             Coset::new(1 << variable_num, Mersenne61Ext::random_element());
         let mut prover = FriProver::new(
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn test_virgo_proof_size() {
         for i in 5..21 {
-            let proof_size = output_proof_size(i, 3);
+            let proof_size = output_proof_size(i);
             println!(
                 "virgo pcs proof size of {} variables is {} bytes",
                 i, proof_size

@@ -20,13 +20,13 @@ mod tests {
     use util::algebra::field::mersenne61_ext::Mersenne61Ext;
     use util::split_n;
 
-    const SECURITY_BITS: usize = 100;
+    use util::{CODE_RATE, SECURITY_BITS};
 
-    fn output_proof_size(log_n: usize, code_rate: usize, terminate_round: usize) -> usize {
+    fn output_proof_size(log_n: usize, terminate_round: usize) -> usize {
         let log_t = log_n - 1;
-        let oracle = RandomOracle::new(log_t - terminate_round, SECURITY_BITS / code_rate);
+        let oracle = RandomOracle::new(log_t - terminate_round, SECURITY_BITS / CODE_RATE);
         let mut interpolate_cosets = vec![Coset::new(
-            1 << (log_t + code_rate),
+            1 << (log_t + CODE_RATE),
             Mersenne61Ext::random_element(),
         )];
         for i in 1..log_t {
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn test_proof_size() {
         for i in 5..21 {
-            let proof_size = output_proof_size(i, 3, 1);
+            let proof_size = output_proof_size(i, 1);
             println!("vss proof size of {} variables is {} bytes", i, proof_size);
         }
     }

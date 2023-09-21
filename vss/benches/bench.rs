@@ -12,12 +12,12 @@ use util::algebra::coset::Coset;
 use util::algebra::field::mersenne61_ext::Mersenne61Ext;
 use util::split_n;
 
-const SECURITY_BITS: usize = 100;
-fn vss_deal(log_n: usize, code_rate: usize, terminate_round: usize) {
+use util::{CODE_RATE, SECURITY_BITS};
+fn vss_deal(log_n: usize, terminate_round: usize) {
     let log_t = log_n - 1;
-    let oracle = RandomOracle::new(log_t - terminate_round, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(log_t - terminate_round, SECURITY_BITS / CODE_RATE);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (log_t + code_rate),
+        1 << (log_t + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..log_t {
@@ -59,11 +59,11 @@ fn vss_deal(log_n: usize, code_rate: usize, terminate_round: usize) {
     dealer.query();
 }
 
-fn vss_verify(c: &mut Criterion, log_n: usize, code_rate: usize, terminate_round: usize) {
+fn vss_verify(c: &mut Criterion, log_n: usize, terminate_round: usize) {
     let log_t = log_n - 1;
-    let oracle = RandomOracle::new(log_t - terminate_round, SECURITY_BITS / code_rate);
+    let oracle = RandomOracle::new(log_t - terminate_round, SECURITY_BITS / CODE_RATE);
     let mut interpolate_cosets = vec![Coset::new(
-        1 << (log_t + code_rate),
+        1 << (log_t + CODE_RATE),
         Mersenne61Ext::random_element(),
     )];
     for i in 1..log_t {
@@ -125,7 +125,7 @@ fn bench_vss_deal(c: &mut Criterion) {
         let terminate_round = 1;
         c.bench_function(&format!("vss prove {}", i), move |b| {
             b.iter(|| {
-                vss_deal(i, 3, terminate_round);
+                vss_deal(i, terminate_round);
             })
         });
     }
@@ -134,7 +134,7 @@ fn bench_vss_deal(c: &mut Criterion) {
 fn bench_vss_verify(c: &mut Criterion) {
     for i in 5..21 {
         let terminate_round = 1;
-        vss_verify(c, i, 3, terminate_round);
+        vss_verify(c, i, terminate_round);
     }
 }
 
