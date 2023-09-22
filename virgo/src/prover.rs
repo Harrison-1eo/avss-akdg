@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use super::verifier::FriVerifier;
 use util::{
     algebra::{
-        field,
         polynomial::{MultilinearPolynomial, Polynomial, VanishingPolynomial},
     },
     merkle_tree::MERKLE_ROOT_SIZE,

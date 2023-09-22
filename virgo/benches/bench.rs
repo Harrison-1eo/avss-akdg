@@ -59,7 +59,7 @@ fn open(criterion: &mut Criterion, variable_num: usize) {
     }
     let random_oracle = RandomOracle::new(variable_num, SECURITY_BITS / CODE_RATE);
     let vector_interpolation_coset = Coset::new(1 << variable_num, Mersenne61Ext::random_element());
-    let mut prover = FriProver::new(
+    let prover = FriProver::new(
         variable_num,
         &interpolate_cosets,
         &vector_interpolation_coset,
