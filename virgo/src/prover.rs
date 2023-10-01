@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use super::verifier::FriVerifier;
 use util::{
-    algebra::{
-        polynomial::{MultilinearPolynomial, Polynomial, VanishingPolynomial},
-    },
+    algebra::polynomial::{MultilinearPolynomial, Polynomial, VanishingPolynomial},
     merkle_tree::MERKLE_ROOT_SIZE,
     random_oracle::RandomOracle,
 };
